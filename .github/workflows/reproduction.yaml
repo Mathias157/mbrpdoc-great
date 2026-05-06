@@ -19,19 +19,16 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - name: Setup Snakemake environment
-              uses: conda-incubator/setup-miniconda@v3
+            - name: Setup Pixi environment
+              uses: prefix-dev/setup-pixi@v0.8.1
               with:
-                  auto-update-conda: true
-                  python-version: "3.12"
-                  activate-environment: research-template
-                  environment-file: environment.yaml
+                  pixi-version: v0.67.2
 
             - name: Reproduce results
-              run: snakemake --use-conda --cores 2
+              run: pixi run snakemake --cores 2
 
             - name: Generate DAG
-              run: snakemake dag --use-conda --cores 1
+              run: pixi run snakemake dag --cores 1
 
             - name: Archive build
               if: success()

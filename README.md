@@ -1,9 +1,10 @@
 # Research Template
 
-A reproducible-research project template combining three things that usually
-live in three separate worlds:
+A reproducible-research project template made by Claude Opus 4.7. It combines structures from 
+three repositories:
 
-1. **A working pipeline** — Snakemake DAG, Conda environments, Pandoc-rendered HTML/PDF/DOCX report, pytest, GitHub Actions CI/CD that re-runs every push. Adapted from [`timtroendle/cookiecutter-reproducible-research`](https://github.com/timtroendle/cookiecutter-reproducible-research).
+1. **A working pipeline** — Snakemake DAG, Pixi environment management, Pandoc-rendered HTML/PDF report, pytest, GitHub Actions CI/CD that re-runs every push. Adapted from [`timtroendle/cookiecutter-reproducible-research`](https://github.com/timtroendle/cookiecutter-reproducible-research) with some inspiration 
+from [FedericoTartarini/reproducible-research](https://github.com/FedericoTartarini/reproducible-research).
 2. **A living wiki** — Obsidian-compatible knowledge base (`wiki/`) with topic, concept, group, synthesis, query, entity, and research-evaluation pages. Append-only event log + state file. Adapted from [`andrehuang/researcher-pack`](https://github.com/andrehuang/researcher-pack).
 3. **An LLM research loop** — `paper-read`, `lit-search`, `research-companion`, `weekly-review`, `orchestrate`, `vault-sync` skills with eager invocation. Three sub-agents (brainstormer, idea-critic, research-strategist) for divergence, critique, and strategy. Hook-based bookkeeping that auto-commits if you opt in.
 
@@ -15,10 +16,9 @@ The result is one repo where the *thinking* (wiki + skills) and the *running*
 ```bash
 git clone https://github.com/<you>/research-template.git my-project
 cd my-project
+rm -rf .git
 ./setup.sh                 # interactive wizard: project name, vault sync, auto-commit
-conda env create -f environment.yaml
-conda activate <project-short-name>
-snakemake --use-conda --cores 4   # build the demo report
+pixi run snakemake --cores 4   # build the demo report (pixi installs deps automatically)
 ```
 
 Then open the repo in OpenCode and start a conversation. The
@@ -37,7 +37,8 @@ should I work on?".
 ├── principles/                 # academic-writing.md, research-strategy.md
 ├── wiki/                       # Knowledge base (Obsidian vault)
 ├── vault-mirror/               # READ-ONLY mirror of primary Obsidian vault
-├── Snakefile + envs/ + scripts/ + tests/ + report/
+├── Snakefile + scripts/ + tests/ + report/
+├── pixi.toml + pixi.lock       # Environment + dependency lockfile
 ├── research-state.yaml         # State (read on session start)
 └── events.jsonl                # Append-only event log
 ```
@@ -123,10 +124,39 @@ updates, research-evaluation saves, and config edits get categorised commit
 messages (`wiki: update foo, bar`, `research: update baz`). It pushes if a
 remote named `origin` is configured; otherwise commits locally.
 
+## Environment & Dependencies
+
+This template uses **[Pixi](https://pixi.sh)** for environment and dependency management:
+
+- **Single source of truth**: `pixi.toml` defines all dependencies (analysis, testing, reporting, linting)
+- **Deterministic lockfile**: `pixi.lock` ensures reproducibility across machines and CI runs
+- **Fast installation**: `pixi install` resolves dependencies via a Rust-based solver (faster than conda)
+- **No per-rule environments**: All Snakemake rules run in the shared pixi environment (simpler, faster)
+
+### Installation
+
+Install pixi once: https://pixi.sh/latest/#installation
+
+Then bootstrap the project:
+
+```bash
+cd my-project
+pixi install              # Creates isolated project environment
+pixi run snakemake --cores 4   # Runs pipeline in pixi environment
+```
+
+Or use a pixi shell for interactive work:
+
+```bash
+pixi shell --environment default  # Activate pixi environment
+snakemake --cores 4               # No pixi prefix needed inside shell
+exit                              # Leave environment
+```
+
 ## CI/CD
 
 `.github/workflows/reproduction.yaml` re-runs `snakemake` on every push, PR,
-and the 8th of each month. `.github/workflows/lint.yaml` runs ruff + shellcheck
+and the 8th of each month via pixi. `.github/workflows/lint.yaml` runs ruff + shellcheck
 + yamllint.
 
 ## Customising
@@ -144,8 +174,9 @@ can fork it.
 
 ## Companions
 
+- **[Pixi](https://pixi.sh)** — fast environment & dependency management (Rust-based)
 - **[Snakemake](https://snakemake.readthedocs.io)** — pipeline DAG
-- **[Pandoc](https://pandoc.org)** — Markdown → HTML/PDF/DOCX
+- **[Pandoc](https://pandoc.org)** — Markdown → HTML/PDF
 - **[Obsidian](https://obsidian.md)** — open `wiki/` and your primary vault as separate vaults
 - **[Dataview plugin](https://github.com/blacksmithgu/obsidian-dataview)** — for inline-field queries on the wiki
 
@@ -171,7 +202,7 @@ MIT — see [LICENSE](LICENSE).
 
 This template is a synthesis of:
 
-- **`timtroendle/cookiecutter-reproducible-research`** — Snakemake/Conda/Pandoc scaffolding (MIT)
+- **`timtroendle/cookiecutter-reproducible-research`** — Snakemake/Pixi/Pandoc scaffolding (MIT)
 - **`FedericoTartarini/reproducible-research`** — folder-structure conventions (MIT)
 - **`andrehuang/researcher-pack`** — skill format, wiki schema, hook design (MIT)
 - **Nicholas Carlini** — research-strategy principles (RS1–RS8, derived from his "How to Win a Best Paper Award")

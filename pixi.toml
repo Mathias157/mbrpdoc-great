@@ -1,0 +1,45 @@
+[workspace]
+name = "mbrpdoc-great"
+version = "0.1.0"
+description = "A reproducible research template combining Snakemake pipeline, Obsidian wiki, and OpenCode LLM loop"
+authors = ["Claude Opus 4.7 <claude@anthropic.com>"]
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+# All dependencies in one flat environment (pixi simplifies dependency management)
+[dependencies]
+python = "3.12.*"
+snakemake = ">=9.8"
+# Analysis tools
+numpy = "2.3.*"
+pandas = "2.3.*"
+matplotlib = "3.10.*"
+seaborn = "0.13.*"
+ipdb = "0.13.*"
+# Testing
+pytest = "8.4.*"
+pytest-html = "4.1.*"
+# Reporting
+pandoc = "3.6.2"
+"pandoc-crossref" = ">=0.3.18.1,<0.4"
+pango = "1.56.*"
+cairocffi = "1.7.*"
+psutil = "7.0.*"
+weasyprint = "62.3.*"
+katex = "0.16.*"
+brotlipy = "0.7.*"
+pip = "25.1.*"
+# DAG visualization
+graphviz = "*"
+# Linting & CI
+ruff = "*"
+yamllint = "*"
+shellcheck = "*"
+
+# --- Tasks ---
+[tasks]
+run = "snakemake --cores 4"
+test = "snakemake test --cores 4"
+dag = "snakemake dag --cores 1"
+clean = "snakemake clean"
+"clean-all" = "snakemake clean && rm -rf build/"

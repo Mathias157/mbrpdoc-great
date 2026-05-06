@@ -7,11 +7,12 @@
 #
 # Run this AFTER cloning the template. It:
 #   - Asks for project metadata (name, short_name, author, institute, primary vault path)
-#   - Substitutes placeholders in research-state.yaml, report/pandoc-metadata.yaml,
-#     environment.yaml, and Snakefile
+#   - Substitutes placeholders in research-state.yaml and report/pandoc-metadata.yaml
+#   - Updates pixi.toml with project short name
 #   - Optionally configures vault_sync (path to primary Obsidian vault + project sub-path)
 #   - Optionally enables auto-commit (touches .autocommit.enabled)
 #   - Initialises a fresh git repo if one isn't already present
+#   - Automatically runs `pixi install` to set up the project environment
 
 set -e
 
@@ -62,7 +63,7 @@ echo "Customise this clone for your project. Re-runnable; safe to skip with Ctrl
 echo ""
 
 PROJECT_NAME=$(prompt "Project name (human-readable)" "My Research Project")
-PROJECT_SHORT_NAME=$(prompt "Project short name (kebab-case, used in conda env)" "my-research-project")
+PROJECT_SHORT_NAME=$(prompt "Project short name (kebab-case, used in pixi project name)" "my-research-project")
 AUTHOR=$(prompt "Author name" "$USER")
 INSTITUTE=$(prompt "Institute" "Your Institute")
 SHORT_DESCRIPTION=$(prompt "Short description (one line)" "A reproducible research project.")
@@ -125,11 +126,13 @@ EOF
     fi
 fi
 
-# 2. environment.yaml — substitute conda env name
-ENV_FILE="$REPO_ROOT/environment.yaml"
-if [ -f "$ENV_FILE" ] && [ "$CHECK_ONLY" -eq 0 ]; then
-    sed -i.bak "s|^name:.*|name: $PROJECT_SHORT_NAME|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
-    action "environment.yaml: name -> $PROJECT_SHORT_NAME"
+# 2. pixi.toml — substitute pixi project name
+PIXI_FILE="$REPO_ROOT/pixi.toml"
+if [ -f "$PIXI_FILE" ] && [ "$CHECK_ONLY" -eq 0 ]; then
+    sed -i.bak "s|^name = \"research-template\"|name = \"$PROJECT_SHORT_NAME\"|" "$PIXI_FILE" && rm -f "$PIXI_FILE.bak"
+    action "pixi.toml: name -> $PROJECT_SHORT_NAME"
+elif [ -f "$PIXI_FILE" ]; then
+    echo "  [check] would update pixi.toml: name -> $PROJECT_SHORT_NAME"
 fi
 
 # 3. report/pandoc-metadata.yaml — substitute title, author, institute, abstract
@@ -177,9 +180,9 @@ bold "Done."
 echo ""
 echo "Next steps:"
 echo "  1. Inspect research-state.yaml and report/pandoc-metadata.yaml — adjust if needed."
-echo "  2. Create the conda env:   conda env create -f environment.yaml"
-echo "  3. Activate it:            conda activate $PROJECT_SHORT_NAME"
-echo "  4. Run the demo pipeline:  snakemake --use-conda --cores 4"
+echo "  2. pixi will auto-install environments when you run snakemake (no manual activation needed!)."
+echo "  3. Run the demo pipeline:  pixi run --environment default snakemake --use-pixi --cores 4"
+echo "  4. Or, activate pixi shell: pixi shell --environment default"
 echo "  5. Open in OpenCode and start a conversation — the research-session skill will activate on greetings."
 echo ""
 if [ -z "$PRIMARY_VAULT" ]; then

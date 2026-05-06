@@ -67,3 +67,6 @@ vault-mirror/**
 # Large attachments mirrored alongside notes — keep out of git
 wiki/sources/papers/*.pdf
 wiki/sources/papers/*.PDF
+# pixi environments
+.pixi/*
+!.pixi/config.toml

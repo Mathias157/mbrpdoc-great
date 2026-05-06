@@ -10,11 +10,11 @@ from pathlib import Path
 
 from snakemake.utils import min_version
 
-PANDOC = "pandoc --filter pantable --filter pandoc-crossref --citeproc -f markdown+mark"
+PANDOC = "pandoc --filter pandoc-crossref --citeproc -f markdown+mark"
 
 configfile: "config/default.yaml"
 
-min_version("9.6")
+min_version("8.0")
 
 
 rule all:
@@ -31,7 +31,6 @@ rule run:
         slope=config["slope"],
         x0=config["x0"],
     output: "build/results.pickle"
-    conda: "envs/default.yaml"
     script: "scripts/model.py"
 
 
@@ -40,7 +39,6 @@ rule plot:
     input:
         results=rules.run.output,
     output: "build/plot.png"
-    conda: "envs/default.yaml"
     script: "scripts/vis.py"
 
 
@@ -71,7 +69,6 @@ rule report:
     output: "build/report.{suffix}"
     wildcard_constraints:
         suffix="((html)|(pdf)|(docx))"
-    conda: "envs/report.yaml"
     shadow: "minimal"
     shell:
         """
@@ -91,7 +88,6 @@ rule dag:
     message: "Plot dependency graph of the workflow."
     input: rules.dag_dot.output[0]
     # Output is deliberately omitted so rule is executed each time.
-    conda: "envs/dag.yaml"
     shell: "dot -Tpdf {input} -o build/dag.pdf"
 
 
@@ -141,5 +137,4 @@ rule test:
         model_results=rules.run.output[0],
     log: "build/test-report.html"
     output: "build/test.success"
-    conda: "./envs/test.yaml"
     script: "./tests/test_runner.py"

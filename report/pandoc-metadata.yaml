@@ -6,7 +6,7 @@ institute: DTU Wind and Energy Systems
 keywords:
     - reproducible-research
 abstract: |
-    My contributions to the GREAT project
+    My work in the GREAT project
 bibliography: literature.yaml
 csl: apa.csl
 link-citations: True
