@@ -12,15 +12,15 @@ session:
   last_writing_review: null
   last_session: null
 wiki:
-  total_pages: 0
-  topics: 0
+  total_pages: 1
+  topics: 1
   concepts: 0
   groups: 0
   syntheses: 0
   queries: 0
   research_evaluations: 0
   stale_pages: []
-  last_ingest: null
+  last_ingest: temporal-resolution (2026-05-06)
   orphans: []
 ideas:
   raw_ideas: 0

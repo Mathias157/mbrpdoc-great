@@ -4,7 +4,7 @@ Contains initial analysis sources for temporal aggregation study. Building knowl
 
 ## Topics
 
-*No topic pages yet. Mention a paper to the LLM (it triggers the paper-read skill), or create `wiki/topics/<slug>.md` manually.*
+- `[[temporal-resolution]]` — Temporal aggregation methods, adequacy trade-offs, and S8T42 baseline choice for GREAT
 
 ## Concepts
 

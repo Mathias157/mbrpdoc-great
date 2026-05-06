@@ -1,3 +1,4 @@
 {"ts":"1970-01-01T00:00:00","type":"system:init","detail":"research-template scaffolded","source":"setup"}
 {"ts":"2026-05-06T15:30:04","type":"vault:sync","detail":"Synced 15 files from 02 - Projects/GREAT","source":"vault-sync"}
 {"ts":"2026-05-06T15:46:00","type":"wiki:update","detail":"Added analysis sources: TemporalAggregationFinalResults.ods, TemporalAggComputationTime.ods","source":"research-session"}
+{"ts":"2026-05-06T15:50:00","type":"wiki:update","detail":"Created topic page: temporal-resolution. Ingested GREAT temporal aggregation analysis from vault note.","source":"paper-read"}
