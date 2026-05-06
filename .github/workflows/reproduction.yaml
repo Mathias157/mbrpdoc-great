@@ -1,0 +1,43 @@
+name: Reproduction
+
+on:
+    schedule:
+        - cron: "0 3 8 * *" # Runs every eighth day of the month at 3am.
+    push:
+        branches:
+            - main
+    pull_request:
+
+defaults:
+    run:
+        shell: bash -l {0}
+
+jobs:
+    reproduce:
+        name: Reproduce the demo analysis
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Snakemake environment
+              uses: conda-incubator/setup-miniconda@v3
+              with:
+                  auto-update-conda: true
+                  python-version: "3.12"
+                  activate-environment: research-template
+                  environment-file: environment.yaml
+
+            - name: Reproduce results
+              run: snakemake --use-conda --cores 2
+
+            - name: Generate DAG
+              run: snakemake dag --use-conda --cores 1
+
+            - name: Archive build
+              if: success()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-artifacts
+                  path: build/
+                  if-no-files-found: warn
+                  retention-days: 14

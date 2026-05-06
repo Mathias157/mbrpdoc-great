@@ -1,0 +1,69 @@
+# generated files
+build/
+archive/
+
+## Core latex/pdflatex auxiliary files:
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+
+## Bibliography auxiliary files (bibtex/biblatex/biber):
+*.bbl
+*.bcf
+*.blg
+*-blx.aux
+*-blx.bib
+*.brf
+*.run.xml
+
+## Build tool auxiliary files:
+*.fdb_latexmk
+*.synctex
+*.synctex(busy)
+*.synctex.gz
+*.synctex.gz(busy)
+*.pdfsync
+
+# Python
+*.pyc
+build/
+dist/
+__pycache__
+*.egg-info
+.cache/
+
+# Snakemake
+.snakemake/
+dag.pdf
+
+# Researcher Pack runtime state
+.commit-pending
+.commit-lock
+autocommit.enabled
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Vault sync mirror — pulled from primary Obsidian vault, never edit here
+vault-mirror/**
+!vault-mirror/.gitkeep
+!vault-mirror/README.md
+
+# Large attachments mirrored alongside notes — keep out of git
+wiki/sources/papers/*.pdf
+wiki/sources/papers/*.PDF

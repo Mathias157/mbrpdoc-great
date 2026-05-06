@@ -1,0 +1,30 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {"query": "path:topics/", "color": {"a": 1, "rgb": 5364930}},
+    {"query": "path:concepts/", "color": {"a": 1, "rgb": 5026902}},
+    {"query": "path:groups/", "color": {"a": 1, "rgb": 16737095}},
+    {"query": "path:syntheses/", "color": {"a": 1, "rgb": 11030783}},
+    {"query": "path:queries/", "color": {"a": 1, "rgb": 1146985}},
+    {"query": "path:research-evaluations/", "color": {"a": 1, "rgb": 14495300}},
+    {"query": "path:entities/", "color": {"a": 1, "rgb": 9803157}}
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": false,
+  "centerStrength": 0.518,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 1,
+  "close": true
+}

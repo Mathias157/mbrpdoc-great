@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" demote-non-dropping-particle="never" page-range-format="expanded" default-locale="en-GB">
+  <info>
+    <title>American Psychological Association 7th edition (placeholder)</title>
+    <id>http://www.zotero.org/styles/apa</id>
+    <link href="http://www.zotero.org/styles/apa" rel="self"/>
+    <link href="http://www.apastyle.org/" rel="documentation"/>
+    <author>
+      <name>Brenton M. Wiernik</name>
+    </author>
+    <category citation-format="author-date"/>
+    <category field="generic-base"/>
+    <summary>Placeholder APA-style CSL — replace with the canonical apa.csl from https://www.zotero.org/styles for production work.</summary>
+    <updated>2026-01-01T00:00:00+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License.</rights>
+  </info>
+  <citation>
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <text variable="citation-label"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout suffix=".">
+      <text variable="title"/>
+    </layout>
+  </bibliography>
+</style>

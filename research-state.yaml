@@ -1,0 +1,40 @@
+last_updated: '1970-01-01T00:00:00'
+paths:
+  wiki: wiki
+  events_log: events.jsonl
+  principles: principles
+  vault_mirror: vault-mirror
+domain: Energy systems analysis
+project_short_name: mbrpdoc-great
+session:
+  last_paper_ingested: null
+  last_companion_session: null
+  last_writing_review: null
+  last_session: null
+wiki:
+  total_pages: 0
+  topics: 0
+  concepts: 0
+  groups: 0
+  syntheses: 0
+  queries: 0
+  research_evaluations: 0
+  stale_pages: []
+  last_ingest: null
+  orphans: []
+ideas:
+  raw_ideas: 0
+  open_questions: 0
+  dots_to_connect: 0
+  building_blocks_candidate: 0
+  building_blocks_confirmed: 0
+recent_research_evaluations: []
+suggested_actions:
+- type: ingest
+  reason: Wiki is empty. Ingest your first source to get started.
+  command: Read a paper (the paper-read skill activates automatically when you mention
+    one).
+vault_sync:
+  primary_vault: /home/mberos/Documents/OneDrive/obs-notes
+  project_path_in_vault: 02 - Projects/GREAT
+  mirror_target: vault-mirror

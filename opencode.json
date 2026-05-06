@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md",
+    ".opencode/AGENTS.md"
+  ],
+  "agent": {
+    "brainstormer": {
+      "description": "Creative brainstorming sub-agent — see .opencode/agent/brainstormer.md"
+    },
+    "idea-critic": {
+      "description": "Adversarial idea evaluator — see .opencode/agent/idea-critic.md"
+    },
+    "research-strategist": {
+      "description": "Project-level strategic advisor — see .opencode/agent/research-strategist.md"
+    }
+  },
+  "experimental": {
+    "hook": {
+      "file_edited": {
+        "*.md": [
+          { "command": ["bash", "hooks/research_hook.sh"] }
+        ],
+        "*.yaml": [
+          { "command": ["bash", "hooks/research_hook.sh"] }
+        ],
+        "Snakefile": [
+          { "command": ["bash", "hooks/research_hook.sh"] }
+        ]
+      }
+    }
+  }
+}

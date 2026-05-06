@@ -1,0 +1,12 @@
+---
+references:
+- id: 'Demo:2026'
+  author:
+    - family: Doe
+      given: Jane
+  container-title: Journal of Reproducible Research
+  issued:
+    - year: 2026
+  title: A demo reference for the report template.
+  type: article-journal
+...
