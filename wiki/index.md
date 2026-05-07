@@ -8,7 +8,7 @@ Contains initial analysis sources for temporal aggregation study. Building knowl
 
 ## Concepts
 
-*No concept pages yet.*
+- `[[nested-git-submodules-reproducibility]]` — Using nested Git submodules to pin large dependencies (model code + data) and ensure reproducibility across local development and HPC environments
 
 ## Groups
 
@@ -24,7 +24,7 @@ Contains initial analysis sources for temporal aggregation study. Building knowl
 
 ## Queries
 
-*No promoted query results yet.*
+- `[[nested-submodules-hpc-setup]]` — Step-by-step procedure for initializing nested submodules on HPC systems after cloning a repository
 
 ## Research Evaluations
 

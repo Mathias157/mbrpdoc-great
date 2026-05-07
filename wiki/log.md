@@ -4,6 +4,20 @@ Append-only chronological record of wiki operations. Most recent entries at the 
 
 ---
 
+## 2026-05-07
+
+- Created concept page: `wiki/concepts/nested-git-submodules-reproducibility.md`
+  - Documented nested Git submodule pattern for reproducibility (Balmorel + Balmorel_data use case)
+  - Explains how `git submodule update --init --recursive` ensures all dependencies are pinned and available on HPC systems
+  - Added to index under Concepts section
+
+- Created query page: `wiki/queries/nested-submodules-hpc-setup.md`
+  - Step-by-step procedure for initializing nested submodules on HPC systems
+  - Includes local development setup, HPC clone sequence, and practical Snakemake execution notes
+  - Linked to concept page
+
+---
+
 ## 2026-05-06
 
 - Created topic page: `wiki/topics/temporal-resolution.md`
