@@ -38,4 +38,4 @@ vault_sync:
   primary_vault: /home/mberos/Documents/OneDrive/obs-notes
   project_path_in_vault: 02 - Projects/GREAT
   mirror_target: vault-mirror
-  last_sync_at: '2026-05-06T15:30:04'
+  last_sync_at: '2026-05-07T15:35:56'
