@@ -1,0 +1,3 @@
+[submodule "scripts/Balmorel"]
+	path = scripts/Balmorel
+	url = git@github.com:Mathias157/Balmorel.git
