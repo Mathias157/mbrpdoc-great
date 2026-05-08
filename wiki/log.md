@@ -6,6 +6,9 @@ Append-only chronological record of wiki operations. Most recent entries at the 
 
 ## 2026-05-08 (continued)
 
+**Concept Page: IEA APS Scenario**  
+Created `wiki/concepts/iea-aps-scenario.md` — Brief definition of Announced Pledges Scenario used as GREAT demand baseline. Updated index.
+
 **Topic Page: GREAT Scenarios**  
 Created `wiki/topics/great-scenarios.md` — Primary integration point for GREAT scenario framework:
 - Documents TYNDP 2024 storylines (Distributed Energy, Global Ambition) and their narratives

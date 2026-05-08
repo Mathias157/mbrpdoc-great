@@ -7,6 +7,7 @@
 
 ## Concepts
 
+- [[iea-aps-scenario]] — IEA's Announced Pledges Scenario: baseline demand (APS) reflects stated government climate pledges; GREAT flexes tech adoption around this target
 - [[nested-git-submodules-reproducibility]] — Using nested Git submodules to pin large dependencies (model code + data) and ensure reproducibility across local development and HPC environments
 
 ## Groups
