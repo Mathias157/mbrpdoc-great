@@ -12,8 +12,6 @@ key_papers: [TYNDP 2024]
 
 GREAT's scenario framework evaluates the value of flexibility in future European energy systems by creating a 9×9 scenario matrix (81 investment combinations). Rather than model-centric scenarios, the framework builds on **storylines**—coherent narratives about future uncertainty in technology adoption, trade patterns, and policy choices—and then parametrizes each storyline through a set of 9 binary dimensions.
 
-The scenarios are grounded in the **TYNDP 2024 Scenarios Storyline Report**, which provides high-level narratives for European decarbonization pathways. GREAT then instantiates these narratives as operational constraints and technology assumptions in the energy system model (Balmorel/Antares).
-
 **Reference vault-mirror notes**: [[GREAT Scenarios]], [[GREAT Storyline]]
 
 ---
@@ -22,12 +20,13 @@ The scenarios are grounded in the **TYNDP 2024 Scenarios Storyline Report**, whi
 
 ### Distributed Energy (DE)
 
-**Narrative**: Pathway to EU27 carbon neutrality by 2050 through decentralized, community-led decarbonization.
-
-- **Driver**: High levels of energy independence and local economic resilience; strong societal willingness for behavioral shift
-- **Institutions**: Citizens, communities, businesses empowered by authorities
-- **Implication**: Emphasis on distributed renewable generation, local flexibility (rooftop PV, home batteries, smart demand management), reduced reliance on intercontinental energy trade
-- **For GREAT**: Aligns with scenarios emphasizing residential heat-pump adoption, V2G penetration, and reduced long-distance transmission
+This scenario pictures a pathway achieving EU27 carbon neutrality target by
+2050 with higher European Economy. The scenario is driven by a willingness of
+the society to achieve high levels of independence in terms of energy supply
+and goods of strategic importance (e. g., industrial and agricultural produce).
+It translates into both a behavioural shift and strong decentralised drive
+towards decarbonisation through local initiatives by citizens, communities and
+businesses, supported by authorities
 
 **Source**: TYNDP 2024 Scenarios Storyline Report
 
@@ -35,12 +34,10 @@ The scenarios are grounded in the **TYNDP 2024 Scenarios Storyline Report**, whi
 
 ### Global Ambition (GA)
 
-**Narrative**: Pathway to carbon neutrality driven by rapid, global move toward Paris Agreement targets. Centralized technology deployment and international energy trade.
-
-- **Driver**: Fast global decarbonization momentum; consensus on climate urgency
-- **Institutions**: International cooperation and technology rollout
-- **Technologies**: Wide range of centralized options (nuclear, utility-scale renewable, CCS), global energy trade accelerates decarbonization
-- **For GREAT**: Aligns with scenarios emphasizing high transmission investment, large-scale hydrogen trade, electrolyser scale-up, and reduced isolationism
+This scenario pictures a pathway to achieving carbon neutrality by 2050, driven
+by a fast and global move towards the Paris Agreement targets. It translates
+into development of a very wide range of technologies (many being centralised)
+and the use of global energy trade as a tool to accelerate decarbonisation.
 
 **Source**: TYNDP 2024 Scenarios Storyline Report
 

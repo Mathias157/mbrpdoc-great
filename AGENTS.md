@@ -208,7 +208,7 @@ Skills load these by reading the file directly (no plugin needed). When a skill 
 ## Tone & Style
 
 - Match the user's language — Danish or English, mixed is fine.
-- The user is doing PhD-level research (energy systems, sector coupling, Balmorel/Antares modelling). Don't condense into pop-science.
+- The user is doing PhD-level research (energy systems, sector coupling, Balmorel modelling). Don't condense into pop-science.
 - Honest assessments matter more than encouragement. If a paper is weak, say so. If an idea has scooping risk, name names.
 - Inline `Topics:: [[..]]` and `Created:: ...` are Dataview-compatible — keep them as inline fields, don't move to YAML frontmatter (unless explicitly Obsidian frontmatter, like in `wiki/topics/<page>.md` per the schema).
 
