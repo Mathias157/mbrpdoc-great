@@ -1,50 +1,45 @@
-# Research State — auto-maintained by hooks and skills.
-# Read at session start by the research-session skill. Avoid manual edits.
-# Bootstrap values are set by setup.sh; the rest is updated programmatically.
-
-last_updated: "1970-01-01T00:00:00"
-
-# Canonical paths (relative to repo root unless absolute).
+last_updated: '2026-05-08T08:42:00Z'
 paths:
   wiki: wiki
   events_log: events.jsonl
   principles: principles
   vault_mirror: wiki/.vault-mirror
-
-# Meta about the research domain (edit this after setup.sh).
-domain: "generic"
-project_short_name: "research-template"
-
+domain: generic
+project_short_name: research-template
 session:
   last_paper_ingested: null
   last_companion_session: null
   last_writing_review: null
-  last_session: null
-
+  last_session: 2026-05-08T08:42:00Z
 wiki:
-  total_pages: 0
+  total_pages: 1
   topics: 0
   concepts: 0
   groups: 0
   syntheses: 0
-  queries: 0
+  queries: 1
   research_evaluations: 0
   stale_pages: []
   last_ingest: null
   orphans: []
-
 ideas:
   raw_ideas: 0
   open_questions: 0
   dots_to_connect: 0
   building_blocks_candidate: 0
   building_blocks_confirmed: 0
-
-# Recent verdicts surface in the next session briefing.
 recent_research_evaluations: []
-
-# Suggested actions seeded by the briefing skill.
+vault_sync:
+  primary_vault: ~/Documents/OneDrive/obs-notes
+  project_path_in_vault: 02 - Projects/GREAT
+  mirror_target: wiki/.vault-mirror
+  exclude:
+  - .obsidian
+  - .trash
+  - Attachments
+  - '*.canvas'
+  last_sync_at: '2026-05-08T08:41:44'
 suggested_actions:
-  - type: ingest
-    reason: "Wiki is empty. Ingest your first source to get started."
-    command: "Read a paper (the paper-read skill activates automatically when you mention one)."
+- type: scenario_data
+  reason: GREAT scenario data sources documented; now collect actual datasets
+  command: "See wiki/queries/great-scenario-data-sources.md — follow download rules in Rule 2–7. Prioritize: (1) TYNDP2024, (2) Consensus.app EV scenarios, (3) IEA H₂. Others can use documented assumptions initially."

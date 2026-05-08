@@ -24,7 +24,7 @@ Empty. Ingest your first source to populate this catalog.
 
 ## Queries
 
-*No promoted query results yet.*
+- [[great-scenario-data-sources]] — Data acquisition rules, sources, and assumptions for 9×9 GREAT scenario matrix
 
 ## Research Evaluations
 
