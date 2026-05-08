@@ -100,21 +100,23 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 ### 4. Isolationism / Transmission Constraints
 
 **Current Status**: ✅ Source identified  
-**URL**: [TYNDP2024 Demand Scenarios](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/Demand_Scenarios_TYNDP_2024_After_Public_Consultation.xlsb.zip)
+**URLs**: 
+- [TYNDP2024 Reference Grid & Investment Candidates](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/20231103-Electricity-and-Hydrogen-Reference-Grid-Investment-Candidates.xlsx.zip)
+- [TYNDP2024 Line Data](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/Line-data.zip)
 
-**Data Included**: Transmission capacity, investment candidates, reference grid topology
+**Data Included**: Reference grid topology, transmission investment candidates, line-level data
 
 **Action Items**:
-- [ ] Download TYNDP2024 data → `data/tyndp-2024/`
+- [ ] Download both TYNDP2024 files → `data/tyndp-2024/`
 - [ ] Extract transmission capacity data (reference grid scenario)
-- [ ] Define "isolationism": reduce cross-border transmission investment by X% (suggest 50%)
-- [ ] Calculate new transmission limits for grid model
+- [ ] Define "isolationism": use reference grid only; no investment candidates enabled
+- [ ] Calculate transmission limits for grid model
 - [ ] Cross-check with Theo's prior analysis (vault-mirror notes mention transmission sensitivity)
 - [ ] Verify against GREAT current assumptions for baseline transmission
 
 **Assumptions if Data Unclear**:
-- Isolationism scenario = reference grid only; no investment candidates enabled
-- Or: 50% reduction in planned transmission capacity additions vs. TYNDP2024
+- Isolationism scenario = reference grid only; investment candidates (AC/DC lines) disabled
+- Baseline scenario = reference grid + selected investment candidates
 - Document choice and reasoning
 
 **Notes**: TYNDP is authoritative source; this dimension is well-supported.
@@ -258,18 +260,14 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ---
 
-## Data Download & Integration Rules
+## Data Organization & Snakemake Integration
 
-### Rule 1: Source Priority
-1. **Published scenario reports** (IEA, IRENA, TYNDP, AGORA) — authoritative, time-stamped
-2. **Peer-reviewed papers** (consensus.app, journal databases) — methodologically sound
-3. **Model assumptions** (Kountouris, Theo's work, BALMOREL docs) — internally consistent
-4. **Reasonable assumptions** — document clearly; flag for peer review
+Data files belong in `data/` organized by source. Snakemake rules in `rules/` orchestrate downloads, extraction, and integration into model input files.
 
-### Rule 2: File Organization
+**File structure**:
 ```
 data/
-├── tyndp-2024/               # TYNDP2024 source files (xlsx, csv)
+├── tyndp-2024/               # TYNDP2024 source files
 ├── ev-fleet-scenarios/       # EV stock projections
 ├── hydrogen-demand/          # IEA H₂ scenarios
 ├── industrial-electrification/ # Industry decarbonization data
@@ -277,57 +275,9 @@ data/
 └── assumptions-log.yaml      # Central registry of all assumptions
 ```
 
-### Rule 3: Metadata & Citation
-For every data file:
-- **Source**: URL / publication / author
-- **Date accessed**: YYYY-MM-DD
-- **License**: open, restricted, contact author
-- **Format**: xlsx, csv, pdf page range
-- **Notes**: preprocessing done, aggregations, units (MWh, GJ, tonnes, %)
+**Snakemake workflow**: `rules/` contains rules for each data source. Example: `rules/download_tyndp2024.smk` downloads demand scenarios, reference grid, and line data into `data/tyndp-2024/`.
 
-Example header in `data/tyndp-2024/README.md`:
-```
-# TYNDP 2024 Scenario Data
-- Source: https://2024-data.entsos-tyndp-scenarios.eu/...
-- Downloaded: 2026-05-08
-- License: CC BY 4.0 (check ENTSOS terms)
-- Files: Demand_Scenarios_TYNDP_2024.xlsb, Transmission_Investments.csv
-- Units: demand in MWh/h, transmission capacity in MW
-- Preprocessing: extracted EU-27 + Norway + Switzerland
-```
-
-### Rule 4: Assumption Documentation
-Every assumption must have:
-- **Date stated**: YYYY-MM-DD
-- **Rationale**: 1–3 sentences
-- **Quantification**: what % reduction / increase / fixed value?
-- **Sensitivity**: mark if assumption likely affects results significantly
-- **Revisit trigger**: when to re-evaluate (e.g., "when H₂ IEA report updates")
-
-### Rule 5: Backwards Compatibility
-When updating assumptions / sources:
-- Do NOT overwrite old data; version it: `data/ev-fleet-scenarios/2026-05-08/`, `data/ev-fleet-scenarios/2026-05-15/`
-- Keep old `assumptions-log.yaml` as `assumptions-log.2026-05-08.yaml`
-- In model config, specify the date of assumptions used: `scenario_data_snapshot: "2026-05-08"`
-- Document the change in `events.jsonl` and `wiki/log.md`
-
-### Rule 6: Validation Checklist
-Before integrating data into model:
-- [ ] Source URL accessible / data downloaded
-- [ ] Units match model expectations (MWh/h, €/MWh, tonnes CO₂, %)
-- [ ] Time resolution compatible (annual, monthly, hourly?)
-- [ ] Geographic scope covers all regions in model (EU-27, UK, Norway, etc.?)
-- [ ] Baseline year matches model base year (2024? 2025?)
-- [ ] Dimensions (EV fleet, HP penetration, etc.) align with scenario variables
-- [ ] Metadata file created in corresponding `data/*/README.md`
-
-### Rule 7: Model Integration
-Once data is validated:
-1. Create a Python script `scripts/load_scenario_data.py` that reads from `data/` and produces model input files
-2. Version the outputs: `build/scenario_inputs/great_scenario_2026-05-08.yml`
-3. Snakemake rule `rules/prepare_scenarios.smk` ingests these
-4. Document in `Snakefile` which data version is active
-5. Commit `data/` snapshots to git (or `.gitignore` if too large; use DVC)
+**Metadata**: Every downloaded dataset should have a `README.md` in its directory documenting source URL, access date, license, format, units, and preprocessing steps.
 
 ---
 
@@ -343,7 +293,7 @@ Once data is validated:
 - Assumptions log: populate with specific values and revisit triggers
 
 ### To Do ⏳
-- [ ] Download TYNDP2024 data (may require registration)
+- [ ] Download TYNDP2024 data (use Snakemake rule in `rules/download_tyndp2024.smk`)
 - [ ] Extract & quantify EV pessimistic scenario from Consensus papers
 - [ ] Find or assume HP adoption barriers study
 - [ ] Find or assume industry electrification scenario
@@ -351,8 +301,7 @@ Once data is validated:
 - [ ] Define electrolyser constant profile (or get from literature)
 - [ ] Define large-scale storage constraints
 - [ ] Finalize datacentre demand response potential
-- [ ] Populate `assumptions-log.yaml` with specific numbers
-- [ ] Create `scripts/load_scenario_data.py` and Snakemake integration
+- [ ] Populate `data/assumptions-log.yaml` with specific numbers
 
 ---
 
