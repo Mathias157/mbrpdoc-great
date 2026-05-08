@@ -54,7 +54,7 @@ PRIMARY_VAULT="${PRIMARY_VAULT/#\~/$HOME}"
 
 PROJECT_PATH_IN_VAULT="${PROJECT_PATH_IN_VAULT:-$(read_state_value project_path_in_vault)}"
 MIRROR_TARGET="${MIRROR_TARGET:-$(read_state_value mirror_target)}"
-MIRROR_TARGET="${MIRROR_TARGET:-vault-mirror}"
+MIRROR_TARGET="${MIRROR_TARGET:-wiki/.vault-mirror}"
 
 if [ -z "$PROJECT_PATH_IN_VAULT" ]; then
     echo "[vault-sync] No project_path_in_vault configured."
@@ -63,7 +63,7 @@ if [ -z "$PROJECT_PATH_IN_VAULT" ]; then
     echo "    vault_sync:"
     echo "      primary_vault: \"$PRIMARY_VAULT\""
     echo "      project_path_in_vault: \"02 - Projects/<project-name>\""
-    echo "      mirror_target: \"vault-mirror\""
+    echo "      mirror_target: \"wiki/.vault-mirror\""
     echo ""
     echo "[vault-sync] Or set the PROJECT_PATH_IN_VAULT environment variable and re-run."
     exit 1

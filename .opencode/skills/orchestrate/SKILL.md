@@ -28,7 +28,7 @@ If the task is purely an academic-writing review or drafting workflow, prefer de
 
 Before deploying any sub-agents:
 
-1. If the task involves academic writing, read `principles/academic-writing.md` for the 30 writing principles organised in 6 categories.
+1. If the task involves academic writing, read `wiki/meta/principles/academic-writing.md` for the 30 writing principles organised in 6 categories.
 2. Read repo-root `AGENTS.md` for project-specific structure and conventions.
 3. Check for project-level agent definitions: glob `.opencode/agent/*.md` in the working directory and read their frontmatter.
 

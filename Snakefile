@@ -10,17 +10,14 @@ from pathlib import Path
 
 from snakemake.utils import min_version
 
-PANDOC = "pandoc --filter pandoc-crossref --citeproc -f markdown+mark"
-
 configfile: "config/default.yaml"
 
 min_version("8.0")
 
 
 rule all:
-    message: "Run entire analysis and compile report."
+    message: "Run entire analysis and compile LaTeX report."
     input:
-        "build/report.html",
         "build/report.pdf",
         "build/test.success"
 
@@ -42,40 +39,19 @@ rule plot:
     script: "scripts/vis.py"
 
 
-def pandoc_options(wildcards):
-    suffix = wildcards["suffix"]
-    if suffix == "html":
-        return "--embed-resources --standalone --to html5 --mathml"
-    elif suffix == "pdf":
-        return "--pdf-engine weasyprint --lua-filter='../scripts/math/math-katex.lua'"
-    elif suffix == "docx":
-        return []
-    else:
-        raise ValueError(f"Cannot create report with suffix {suffix}.")
-
-
-rule report:
-    message: "Compile report.{wildcards.suffix}."
+rule latex_report:
+    message: "Compile LaTeX report via latexmk."
     input:
-        "report/literature.yaml",
-        "report/report.md",
-        "report/pandoc-metadata.yaml",
-        "report/apa.csl",
-        "report/reset.css",
-        "report/report.css",
-        "scripts/math/math-katex.lua",
-        rules.plot.output,
-    params: options=pandoc_options
-    output: "build/report.{suffix}"
-    wildcard_constraints:
-        suffix="((html)|(pdf)|(docx))"
-    shadow: "minimal"
+        main="report/main.tex",
+        preamble="report/preamble.tex",
+        bib="report/bibliography.bib",
+        plot=rules.plot.output,
+    output: "build/report.pdf"
     shell:
         """
         cd report
-        ln -s ../build .
-        {PANDOC} report.md  --metadata-file=pandoc-metadata.yaml {params.options} \
-        -o ../build/report.{wildcards.suffix}
+        latexmk -pdf main.tex
+        mv ../build/main.pdf ../build/report.pdf
         """
 
 

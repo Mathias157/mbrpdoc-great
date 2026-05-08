@@ -52,7 +52,7 @@ Before any search, in parallel:
 1. Read `wiki/index.md` and `wiki/queries/<topic>/memory-bank.md` (if it exists) to avoid duplicate discoveries.
 2. `glob wiki/topics/*.md` and `wiki/syntheses/*.md` to spot existing wiki coverage of the topic — if a topic page already exists, flag it before creating a new lit-search workspace.
 3. Read `wiki/wiki.schema.md` (page types, naming conventions, linking rules).
-4. If `vault-mirror/` is non-empty, `grep` it for the topic — the user may have prior notes on this subfield.
+4. If `wiki/.vault-mirror/` is non-empty, `grep` it for the topic — the user may have prior notes on this subfield.
 
 Announce to the user what prior coverage exists, then proceed.
 

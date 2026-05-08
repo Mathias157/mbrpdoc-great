@@ -27,7 +27,7 @@ Read all sources in parallel:
 2. **`research-state.yaml`** — current wiki and session state.
 3. **Wiki pages** — Glob all pages, check `last_reviewed` dates, count by type. Include `wiki/research-evaluations/`.
 4. **Git log** — run `git log --oneline --since="7 days ago"` for commit activity.
-5. **`vault-mirror/`** — check timestamps for recently-changed mirrored notes.
+5. **`wiki/.vault-mirror/`** — check timestamps for recently-changed mirrored notes.
 
 If a date range is provided (e.g., "last 14 days", "March 1–7"), adjust the filter period accordingly. Default is 7 days from today.
 
@@ -130,7 +130,7 @@ After presenting the digest, offer:
 1. **Graduate mature ideas** — "These IDEAS items seem ready to become wiki pages: [list]. Want to promote them?"
 2. **Wiki lint** — "There are [N] health issues in the wiki. Want me to run a full lint and fix them?"
 3. **Set focus for next week** — "Want to set a specific focus for next week? I'll adjust your `research-state.yaml` suggested actions."
-4. **Sync from primary vault** — "[N] mirrored notes have drifted. Want to run vault-sync to refresh `vault-mirror/`?"
+4. **Sync from primary vault** — "[N] mirrored notes have drifted. Want to run vault-sync to refresh `wiki/.vault-mirror/`?"
 5. **Share as event** — Emit a weekly review event:
 
 ```jsonl

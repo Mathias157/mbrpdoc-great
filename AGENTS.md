@@ -2,7 +2,7 @@
 
 This is a **reproducible-research project template** that combines:
 
-- **Snakemake** pipeline for data → analysis → report (HTML/PDF/DOCX via Pandoc)
+- **Snakemake** pipeline for data → analysis → report (.tex -> .pdf via latexmk)
 - **Conda** environments per pipeline step
 - **OpenCode skills** for the LLM-driven research loop (paper-read, lit-search, research-companion, weekly-review, orchestrate)
 - **Wiki** as the persistent knowledge base (Obsidian-compatible)
@@ -24,10 +24,11 @@ You (the LLM) operate inside this repo. Read this file first, then follow it.
 │
 ├── .github/workflows/          # CI: snakemake reproduction, lint
 ├── hooks/                      # research_hook.sh, auto_commit.sh, vault_sync.sh
-├── principles/                 # academic-writing.md, research-strategy.md (referenced by skills)
-├── docs/                       # architecture.md, PATTERN.md
 │
 ├── wiki/                       # Knowledge base (Obsidian vault)
+│   ├── meta/                   # Meta-documentation: principles and architecture
+│   │   ├── principles/         # academic-writing.md, research-strategy.md (referenced by skills)
+│   │   └── docs/               # PATTERN.md, architecture.md
 │   ├── topics/                 # THE HEART — thematic pages, 5–15 papers each
 │   ├── concepts/               # Cross-cutting methodological ideas
 │   ├── groups/                 # Research groups
@@ -36,19 +37,17 @@ You (the LLM) operate inside this repo. Read this file first, then follow it.
 │   ├── research-evaluations/   # PURSUE/PARK/KILL verdicts from research-companion
 │   ├── entities/               # Optional deep-read paper pages
 │   ├── sources/{papers,notes}/ # Raw source material
+│   ├── .vault-mirror/          # READ-ONLY mirror from primary Obsidian vault
 │   ├── wiki.schema.md          # Page-type definitions and operations
 │   ├── AGENTS.md               # Wiki-specific agent protocol
 │   ├── index.md                # Content catalog
 │   └── log.md                  # Append-only operation log
 │
-├── vault-mirror/               # READ-ONLY mirror from primary Obsidian vault
-│
 ├── # Snakemake side
 ├── Snakefile                   # The DAG: data -> analysis -> report + tests
 ├── config/default.yaml         # Pipeline parameters
-├── envs/                       # Conda envs (default, report, test, dag)
 ├── profiles/default/           # Snakemake profile
-├── report/                     # Pandoc Markdown report (compiled to HTML/PDF/DOCX)
+├── report/                     # LaTeX report (will be compiled to PDF with latexmk)
 ├── scripts/                    # Python/R/etc. analysis scripts
 ├── tests/                      # Pytest tests of pipeline outputs
 ├── data/                       # Raw input data (gitkeep)
@@ -104,12 +103,12 @@ When ingesting a paper:
 
 ### Vault-Mirror Discipline
 
-`vault-mirror/` is a one-way mirror of the user's primary Obsidian vault
+`wiki/.vault-mirror/` is a one-way mirror of the user's primary Obsidian vault
 (typically `~/Documents/OneDrive/obs-notes/02 - Projects/<project>/`). The mirror
 is configured in `research-state.yaml` under `vault_sync:`, populated by
 `hooks/vault_sync.sh`, and surfaced by the `vault-sync` skill.
 
-**NEVER edit files inside `vault-mirror/`.** Any edits are overwritten on the
+**NEVER edit files inside `wiki/.vault-mirror/`.** Any edits are overwritten on the
 next sync. Use it as **input material**: grep it for keywords, cite findings in
 wiki pages, surface insights when relevant.
 
@@ -130,7 +129,7 @@ Or with vault aliases configured: `[[obs-notes/<note>]]` and `[[<repo-name>/<pag
 
 ### Snakemake Discipline
 
-The repo ships with a working demo pipeline (linear-model fit + plot + Pandoc
+The repo ships with a working demo pipeline (linear-model fit + plot + latexmk
 report). To replace with real analyses:
 
 1. Edit `scripts/model.py` and `scripts/vis.py` (or add new scripts).
@@ -161,12 +160,12 @@ echo '{"tool_input":{"file_path":"wiki/topics/foo.md"}}' | bash hooks/research_h
 
 ### Principles
 
-Two principle files live at `principles/`:
+Two principle files live at `wiki/meta/principles/`:
 
 - **`academic-writing.md`** — 30 prose-quality principles (referenced by paper-read, orchestrate, anything writing-adjacent).
 - **`research-strategy.md`** — 8 Carlini-derived strategy principles (referenced by idea-critic, research-strategist, research-companion).
 
-Skills load these by reading the file directly (no plugin needed). When a skill says "see principles/X.md", actually read it.
+Skills load these by reading the file directly (no plugin needed). When a skill says "see wiki/meta/principles/X.md", actually read it.
 
 ## Tone & Style
 
@@ -186,5 +185,5 @@ fabricating a missing skill.
 
 1. Read the relevant skill SKILL.md file.
 2. Read the wiki schema (`wiki/wiki.schema.md`).
-3. Read the principles (`principles/research-strategy.md`, `principles/academic-writing.md`).
+3. Read the principles (`wiki/meta/principles/research-strategy.md`, `wiki/meta/principles/academic-writing.md`).
 4. Ask the user one specific question, not five.

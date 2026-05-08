@@ -2,14 +2,14 @@
 name: vault-sync
 description: >-
   One-way sync from the user's primary Obsidian vault into this project repo's
-  `vault-mirror/` directory. ACTIVATE EAGERLY when the user mentions syncing notes from
+  `wiki/.vault-mirror/` directory. ACTIVATE EAGERLY when the user mentions syncing notes from
   their primary vault, says "pull from vault", "refresh notes", "sync project notes", or
   when the research-session briefing reports vault-mirror drift.
 ---
 
 # Vault-Sync — Primary Vault → Project Mirror
 
-You handle one-way synchronisation from the user's primary Obsidian vault (the "main" vault, e.g., `~/Documents/OneDrive/obs-notes`) into this project repo's `vault-mirror/` directory. The mirror is read-only from the LLM's perspective — it surfaces project-relevant notes from the primary vault so they're searchable and citeable from the project repo without duplicating content.
+You handle one-way synchronisation from the user's primary Obsidian vault (the "main" vault, e.g., `~/Documents/OneDrive/obs-notes`) into this project repo's `wiki/.vault-mirror/` directory. The mirror is read-only from the LLM's perspective — it surfaces project-relevant notes from the primary vault so they're searchable and citeable from the project repo without duplicating content.
 
 ## Activation Triggers (eager invocation)
 
@@ -17,7 +17,7 @@ ACTIVATE this skill when the user says:
 
 - "sync from vault", "pull from vault", "refresh vault-mirror"
 - "pull project notes", "import primary vault notes"
-- The research-session briefing reports drift in `vault-mirror/`
+- The research-session briefing reports drift in `wiki/.vault-mirror/`
 - The user references a note like `[[<note name>]]` and the LLM cannot find it locally
 
 ## Configuration
@@ -79,8 +79,8 @@ The actual sync is performed by `hooks/vault_sync.sh` which uses `rsync` for one
 
 ## Read-Only Discipline
 
-- **NEVER edit files inside `vault-mirror/`**. Edits will be overwritten on the next sync.
-- Treat `vault-mirror/` as read-only input material.
+- **NEVER edit files inside `wiki/.vault-mirror/`**. Edits will be overwritten on the next sync.
+- Treat `wiki/.vault-mirror/` as read-only input material.
 - If the user wants changes reflected back in the primary vault, they must edit the primary vault directly. The sync is one-way (vault → mirror) by design.
 
 ## Cross-Vault Linking (Obsidian)
@@ -130,7 +130,7 @@ After running, report:
 Vault Sync Complete
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Source : ~/Documents/OneDrive/obs-notes/02 - Projects/<project>
-Target : vault-mirror/
+Target : wiki/.vault-mirror/
 Files  : N synced (M new, K updated, L deleted)
 Time   : 0.4s
 

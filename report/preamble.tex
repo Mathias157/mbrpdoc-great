@@ -1,0 +1,42 @@
+% preamble.tex — Shared packages, settings, and custom commands
+
+\documentclass[12pt,a4paper]{article}
+
+% Typography
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% Layout
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% Math & Science
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+
+% Graphics & Floats
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[labelfont=bf, font=small]{caption}
+
+% Tables
+\usepackage{booktabs}
+\usepackage{array}
+
+% Cross-references & Bibliography
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink]{cleveref}
+
+% Optional: For numbered sections with auto-formatting
+\usepackage{fancyhdr}
+
+% Metadata
+\title{Research Template}
+\author{Your Name}
+\date{\today}
+
+% Custom commands (if any)
+\newcommand{\TODO}[1]{{\color{red}\textbf{TODO: #1}}}

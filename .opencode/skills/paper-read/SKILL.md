@@ -28,7 +28,7 @@ Before starting, load context (in parallel):
 1. Read `wiki/index.md` to know what topics/concepts already exist.
 2. Read `research-state.yaml` for current research state.
 3. Read `wiki/wiki.schema.md` for wiki conventions (if ingesting).
-4. Read `principles/academic-writing.md` for writing-quality standards.
+4. Read `wiki/meta/principles/academic-writing.md` for writing-quality standards.
 
 ## Phase 1: LOAD — Accept and Parse the Paper
 
@@ -84,7 +84,7 @@ To do this, read the relevant wiki pages and compare.
 
 ### 2e. Vault-Mirror Cross-Reference (if applicable)
 
-If `vault-mirror/` is non-empty, scan it (`grep` for keywords from the paper) and surface any prior thinking the user has captured in their primary vault that intersects with this paper.
+If `wiki/.vault-mirror/` is non-empty, scan it (`grep` for keywords from the paper) and surface any prior thinking the user has captured in their primary vault that intersects with this paper.
 
 ### 2f. Gaps and Opportunities
 
@@ -103,7 +103,7 @@ Announce: "What would you like to discuss about this paper? I have your wiki con
 During discussion:
 
 - **Cross-reference with wiki**: When the user asks about a concept, pull up the relevant wiki page and compare the paper's treatment to what's already in the knowledge base.
-- **Connect to vault-mirror**: If the discussion touches notes the user has in their primary vault (mirrored under `vault-mirror/`), mention them. Example: "This relates to your note `vault-mirror/Project/Open Questions.md` on validation under structural change."
+- **Connect to vault-mirror**: If the discussion touches notes the user has in their primary vault (mirrored under `wiki/.vault-mirror/`), mention them. Example: "This relates to your note `wiki/.vault-mirror/Project/Open Questions.md` on validation under structural change."
 - **Challenge claims**: Don't just summarise — push back on weak claims, note missing controls, highlight reproducibility risks, ask whether the findings would replicate.
 - **Position against the researcher's work**: Help the user see how their work relates.
 

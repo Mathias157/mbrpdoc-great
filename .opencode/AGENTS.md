@@ -84,8 +84,8 @@ Never edit `events.jsonl` to "fix" history. Append only. The hook respects this.
 
 ## Vault-Mirror Awareness
 
-`vault-mirror/` is a one-way read-only mirror from the user's primary Obsidian
+`wiki/.vault-mirror/` is a one-way read-only mirror from the user's primary Obsidian
 vault, populated by the vault-sync skill. **Never edit files inside
-`vault-mirror/`** — edits are overwritten on the next sync. Use it as input
+`wiki/.vault-mirror/`** — edits are overwritten on the next sync. Use it as input
 material: grep for keywords, cite findings in wiki pages, surface insights when
 relevant.

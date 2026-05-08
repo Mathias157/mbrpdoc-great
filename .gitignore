@@ -1,6 +1,7 @@
 # generated files
 build/
 archive/
+.worktrees/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
@@ -60,9 +61,9 @@ Thumbs.db
 *~
 
 # Vault sync mirror — pulled from primary Obsidian vault, never edit here
-vault-mirror/**
-!vault-mirror/.gitkeep
-!vault-mirror/README.md
+wiki/.vault-mirror/**
+!wiki/.vault-mirror/.gitkeep
+!wiki/.vault-mirror/README.md
 
 # Large attachments mirrored alongside notes — keep out of git
 wiki/sources/papers/*.pdf

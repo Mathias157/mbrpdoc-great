@@ -152,7 +152,7 @@ esac
 
 # --- Other markdown / docs (lighter touch) ---
 case "$FILE_PATH" in
-    */docs/*|*.md)
+    */wiki/meta/*|*.md)
         emit_event "docs:edit" "Edited: $(basename "$FILE_PATH")" "hook"
         update_state_timestamp
         exit 0

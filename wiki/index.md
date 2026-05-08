@@ -1,14 +1,14 @@
 # Wiki Index
 
-Contains initial analysis sources for temporal aggregation study. Building knowledge base structure.
+Empty. Ingest your first source to populate this catalog.
 
 ## Topics
 
-- `[[temporal-resolution]]` — Temporal aggregation methods, adequacy trade-offs, and S8T42 baseline choice for GREAT
+*No topic pages yet. Mention a paper to the LLM (it triggers the paper-read skill), or create `wiki/topics/<slug>.md` manually.*
 
 ## Concepts
 
-- `[[nested-git-submodules-reproducibility]]` — Using nested Git submodules to pin large dependencies (model code + data) and ensure reproducibility across local development and HPC environments
+*No concept pages yet.*
 
 ## Groups
 
@@ -24,15 +24,8 @@ Contains initial analysis sources for temporal aggregation study. Building knowl
 
 ## Queries
 
-- `[[nested-submodules-hpc-setup]]` — Step-by-step procedure for initializing nested submodules on HPC systems after cloning a repository
+*No promoted query results yet.*
 
 ## Research Evaluations
 
 *No research evaluations yet. Brainstorm a direction with the LLM (it triggers the research-companion skill), then save the verdict to `wiki/research-evaluations/YYYY-MM-DD-<topic-slug>.md`.*
-
-## Sources
-
-### Analyses
-
-- `wiki/sources/analyses/TemporalAggregationFinalResults.ods` — Results from temporal aggregation sensitivity analysis across model scenarios
-- `wiki/sources/analyses/TemporalAggComputationTime.ods` — Computational time trade-offs for different temporal resolutions

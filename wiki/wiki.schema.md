@@ -288,5 +288,5 @@ Health checks for wiki consistency:
 ## Relationship to Other Systems
 
 - **Primary Obsidian vault** (e.g., `~/Documents/OneDrive/obs-notes`): the dashboard. Notes from `02 - Projects/<project>/` may be mirrored read-only into `vault-mirror/` via the vault-sync skill.
-- **Project docs** (e.g., the repo root, `docs/`, `report/`): stay in their canonical locations. Wiki pages cross-reference but don't replace them.
+- **Project docs** (e.g., the repo root, `wiki/meta/`, `report/`): stay in their canonical locations. Wiki pages cross-reference but don't replace them.
 - **Snakemake build outputs** (`build/`): not wiki territory. The wiki tracks the *thinking*; the snakemake DAG tracks the *running*.

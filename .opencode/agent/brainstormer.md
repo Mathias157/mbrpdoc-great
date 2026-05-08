@@ -76,6 +76,6 @@ Before generating, scan the wiki for prior thinking that should inform divergenc
 
 - `wiki/topics/*.md` for adjacent themes
 - `wiki/research-evaluations/*.md` for prior verdicts on the same topic (don't replay killed ideas; learn from them)
-- `vault-mirror/` if it exists — these are imported notes from the user's primary Obsidian vault and may contain seeds the user has already entertained
+- `wiki/.vault-mirror/` if it exists — these are imported notes from the user's primary Obsidian vault and may contain seeds the user has already entertained
 
 Surface 1–2 of these anchors at the top of your output so the user knows you read their prior thinking.

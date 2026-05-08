@@ -3,7 +3,7 @@
 A reproducible-research project template made by Claude Opus 4.7. It combines structures from 
 three repositories:
 
-1. **A working pipeline** — Snakemake DAG, Pixi environment management, Pandoc-rendered HTML/PDF report, pytest, GitHub Actions CI/CD that re-runs every push. Adapted from [`timtroendle/cookiecutter-reproducible-research`](https://github.com/timtroendle/cookiecutter-reproducible-research) with some inspiration 
+1. **A working pipeline** — Snakemake DAG, Pixi environment management, LaTeX-compiled PDF report, pytest, GitHub Actions CI/CD that re-runs every push. Adapted from [`timtroendle/cookiecutter-reproducible-research`](https://github.com/timtroendle/cookiecutter-reproducible-research) with some inspiration 
 from [FedericoTartarini/reproducible-research](https://github.com/FedericoTartarini/reproducible-research).
 2. **A living wiki** — Obsidian-compatible knowledge base (`wiki/`) with topic, concept, group, synthesis, query, entity, and research-evaluation pages. Append-only event log + state file. Adapted from [`andrehuang/researcher-pack`](https://github.com/andrehuang/researcher-pack).
 3. **An LLM research loop** — `paper-read`, `lit-search`, `research-companion`, `weekly-review`, `orchestrate`, `vault-sync` skills with eager invocation. Three sub-agents (brainstormer, idea-critic, research-strategist) for divergence, critique, and strategy. Hook-based bookkeeping that auto-commits if you opt in.
@@ -34,9 +34,9 @@ should I work on?".
 │   └── skills/                 # 7 skills covering the full research loop
 ├── .github/workflows/          # reproduction.yaml + lint.yaml
 ├── hooks/                      # research_hook.sh, auto_commit.sh, vault_sync.sh
-├── principles/                 # academic-writing.md, research-strategy.md
 ├── wiki/                       # Knowledge base (Obsidian vault)
-├── vault-mirror/               # READ-ONLY mirror of primary Obsidian vault
+│   ├── meta/                   # Principles + architecture docs
+│   └── .vault-mirror/          # READ-ONLY mirror of primary Obsidian vault
 ├── Snakefile + scripts/ + tests/ + report/
 ├── pixi.toml + pixi.lock       # Environment + dependency lockfile
 ├── research-state.yaml         # State (read on session start)
@@ -63,9 +63,9 @@ should I work on?".
        wiki/entities   evaluations         (graduates →
                                             topics/syntheses)
 
-   weekly-review reads events.jsonl + state + git log
-   vault-sync mirrors primary vault → vault-mirror/
-   research_hook.sh logs every write & queues auto-commit
+    weekly-review reads events.jsonl + state + git log
+    vault-sync mirrors primary vault → wiki/.vault-mirror/
+    research_hook.sh logs every write & queues auto-commit
 ```
 
 ## Eager Invocation
@@ -98,7 +98,7 @@ this repo's `vault-sync` at it:
 vault_sync:
   primary_vault: "~/Documents/OneDrive/obs-notes"
   project_path_in_vault: "02 - Projects/MyProject"
-  mirror_target: "vault-mirror"
+  mirror_target: "wiki/.vault-mirror"
 ```
 
 Then run `bash hooks/vault_sync.sh` (or invoke the `vault-sync` skill in
@@ -153,6 +153,72 @@ snakemake --cores 4               # No pixi prefix needed inside shell
 exit                              # Leave environment
 ```
 
+## LaTeX Development Workflow
+
+This project uses **native LaTeX** (pdflatex via latexmk).
+
+### Prerequisites
+
+- **TeX Live** installed ([tug.org](https://tug.org/texlive/quickinstall.html))
+- **latexmk** (included with TeX Live)
+- **zathura** (optional, for PDF viewing)
+- **nvim + vimtex** (optional, for editing)
+
+### Local Development
+
+1. **Edit LaTeX files** in `report/`:
+   - `main.tex` — document root
+   - `preamble.tex` — packages & metadata
+   - `sections/*.tex` — chapter/section content
+   - `bibliography.bib` — references
+
+2. **Compile and view** using the provided script:
+
+   ```bash
+   cd report
+   ./compile.sh        # Compile and open in zathura
+   ./compile.sh -f     # Force clean rebuild
+   ```
+
+3. **In a tmux session** (recommended):
+
+   ```
+   tmux new-session -s latex
+   tmux split-window -h -l 40   # nvim pane (left, 60% width)
+   tmux split-window -v         # latexmk pane (bottom-left)
+
+   # Pane 1 (top-left): nvim report/main.tex
+   nvim report/main.tex
+
+   # Pane 2 (bottom-left): latexmk watch
+   cd report && latexmk -pdf -pvc main.tex  # Preview continuous mode
+
+   # Pane 3 (right): zathura opens automatically
+   ```
+
+4. **Sync with Overleaf** (via GitHub):
+
+   ```bash
+   git push origin main
+   # Then pull in Overleaf from GitHub
+   ```
+
+### Pipeline Compilation
+
+For automated builds (e.g., CI):
+
+```bash
+pixi run snakemake --cores 4
+```
+
+This compiles the LaTeX report as part of the full pipeline.
+
+### References
+
+- [vimtex](https://github.com/lervag/vimtex) — nvim LaTeX plugin with snippets
+- [latexmk](https://ctan.org/pkg/latexmk) — Perl script to automate LaTeX compilation
+- [zathura](https://pwmt.org/projects/zathura/) — Lightweight PDF viewer
+
 ## CI/CD
 
 `.github/workflows/reproduction.yaml` re-runs `snakemake` on every push, PR,
@@ -176,7 +242,10 @@ can fork it.
 
 - **[Pixi](https://pixi.sh)** — fast environment & dependency management (Rust-based)
 - **[Snakemake](https://snakemake.readthedocs.io)** — pipeline DAG
-- **[Pandoc](https://pandoc.org)** — Markdown → HTML/PDF
+- **[TeX Live](https://tug.org/texlive/)** — LaTeX distribution
+- **[latexmk](https://ctan.org/pkg/latexmk)** — Perl script to automate LaTeX compilation
+- **[vimtex](https://github.com/lervag/vimtex)** — nvim LaTeX plugin
+- **[zathura](https://pwmt.org/projects/zathura/)** — Lightweight PDF viewer
 - **[Obsidian](https://obsidian.md)** — open `wiki/` and your primary vault as separate vaults
 - **[Dataview plugin](https://github.com/blacksmithgu/obsidian-dataview)** — for inline-field queries on the wiki
 
@@ -191,8 +260,8 @@ The hook is non-negotiable: humans abandon knowledge bases because maintaining
 cross-references is boring; LLMs don't get bored. The wiki is the system of
 record; everything else (state file, event log, primary vault) feeds it.
 
-Read [docs/PATTERN.md](docs/PATTERN.md) for the higher-level argument and
-[docs/architecture.md](docs/architecture.md) for the implementation walkthrough.
+Read [wiki/meta/docs/PATTERN.md](wiki/meta/docs/PATTERN.md) for the higher-level argument and
+[wiki/meta/docs/architecture.md](wiki/meta/docs/architecture.md) for the implementation walkthrough.
 
 ## License
 

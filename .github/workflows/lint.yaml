@@ -37,6 +37,5 @@ jobs:
             - name: Run yamllint
               run: |
                   yamllint -d "{extends: relaxed, rules: {line-length: disable}}" \
-                      config/ envs/ profiles/ environment.yaml report/literature.yaml \
-                      report/pandoc-metadata.yaml research-state.yaml \
+                      config/ profiles/ research-state.yaml \
                       .github/workflows/

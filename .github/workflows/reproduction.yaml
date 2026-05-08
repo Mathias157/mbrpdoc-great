@@ -19,6 +19,14 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Install TeX Live (latexmk + pdflatex)
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y --no-install-recommends \
+                      texlive-latex-base texlive-latex-recommended \
+                      texlive-latex-extra texlive-fonts-recommended \
+                      texlive-science latexmk
+
             - name: Setup Pixi environment
               uses: prefix-dev/setup-pixi@v0.8.1
               with:

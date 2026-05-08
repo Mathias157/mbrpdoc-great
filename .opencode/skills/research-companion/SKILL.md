@@ -97,7 +97,7 @@ If the user signals "quick", "triage", or proposes an idea mid-session, run this
 2. Read `wiki/index.md` and scan for:
    - `wiki/research-evaluations/*.md` whose `topic` field overlaps with the user's input
    - `wiki/topics/*.md` whose subject overlaps (a topic page is prior thinking even if no formal research evaluation was recorded)
-3. If `vault-mirror/` is non-empty, `grep` it for the topic.
+3. If `wiki/.vault-mirror/` is non-empty, `grep` it for the topic.
 4. Present what you found: "Found N prior research evaluations and M related topic pages on adjacent themes." Show one-line summaries, dates, and verdicts.
 5. Ask: "Want to revisit one of these, start fresh, or skim the prior thinking first?"
 6. For any PARK verdict, evaluate whether the recorded `revisit_conditions` have been met and note this to the user.

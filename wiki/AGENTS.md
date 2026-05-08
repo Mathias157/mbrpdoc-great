@@ -7,7 +7,7 @@ project-wide context; this file is the wiki-specific protocol.
 
 1. Read `wiki/wiki.schema.md` — it defines page types, structure, and all operations.
 2. Read `wiki/index.md` — the content catalog.
-3. Read `principles/academic-writing.md` for prose quality.
+3. Read `wiki/meta/principles/academic-writing.md` for prose quality.
 
 ## Wiki Operations (Summary)
 

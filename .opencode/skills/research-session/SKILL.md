@@ -30,7 +30,7 @@ Read these files to build a complete picture (in parallel where possible):
 2. **`events.jsonl`** — last 10–15 events for recent activity context.
 3. **`AGENTS.md`** at repo root — project structure and conventions.
 4. **Wiki staleness check** — Glob `wiki/topics/*.md` and `wiki/concepts/*.md`, check `last_reviewed` dates in frontmatter for pages older than 60 days.
-5. **`vault-mirror/`** if non-empty — read the index and any recently-touched notes (these are mirrored from the user's primary Obsidian vault).
+5. **`wiki/.vault-mirror/`** if non-empty — read the index and any recently-touched notes (these are mirrored from the user's primary Obsidian vault).
 
 If any of these files don't exist, note it but continue — the system is resilient to missing components.
 
