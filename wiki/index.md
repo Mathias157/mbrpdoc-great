@@ -2,6 +2,7 @@
 
 ## Topics
 
+- [[great-scenarios]] — GREAT's 9×9 scenario matrix for evaluating flexibility value; grounded in TYNDP 2024 narratives (Distributed Energy, Global Ambition); operationalized through 9 binary dimensions
 - [[temporal-resolution]] — Temporal aggregation strategy for BALMOREL/Antares: S=8 seasons, T=24 time-steps often outperforms advanced clustering (related vault-mirror note: `GREAT Temporal Resolution`)
 
 ## Concepts

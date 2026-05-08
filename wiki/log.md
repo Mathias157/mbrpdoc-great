@@ -6,6 +6,20 @@ Append-only chronological record of wiki operations. Most recent entries at the 
 
 ## 2026-05-08 (continued)
 
+**Topic Page: GREAT Scenarios**  
+Created `wiki/topics/great-scenarios.md` — Primary integration point for GREAT scenario framework:
+- Documents TYNDP 2024 storylines (Distributed Energy, Global Ambition) and their narratives
+- Maps 9 binary scenario dimensions to baseline vs. pessimistic variants
+- Connects to vault-mirror references ([[GREAT Scenarios]], [[GREAT Storyline]], etc.)
+- Cross-links to active data-acquisition query ([[great-scenario-data-sources]])
+- Identifies scenario construction logic (explicit sector coupling vs. exogenous profiles) and sensitivity findings
+- Flags prioritization (transmission, V2G identified as high-sensitivity flexibility sources)
+- Gaps marked: data refinement for EV pessimism, HP adoption barriers, industry electrification, storage constraints, datacentre DR potential
+
+Updated `wiki/index.md`: added [[great-scenarios]] to Topics section.
+
+---
+
 **Snakemake Rule: TYNDP2024 Download**  
 Created `rules/download_tyndp2024.smk` — template rule demonstrating the data acquisition pattern:
 - Downloads demand scenarios, reference grid, and line data from ENTSOS
