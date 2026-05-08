@@ -12,16 +12,22 @@ session:
   last_writing_review: null
   last_session: 2026-05-08T08:42:00Z
 wiki:
-  total_pages: 1
-  topics: 0
-  concepts: 0
+  total_pages: 11
+  topics: 1
+  concepts: 1
   groups: 0
   syntheses: 0
-  queries: 1
+  queries: 2
   research_evaluations: 0
   stale_pages: []
   last_ingest: null
-  orphans: []
+  orphans:
+    - "[[GREAT Scenarios]]"
+    - "[[Topics/GREAT Scenarios Data]]"
+    - "[[Concepts/Scenario Design]]"
+    - "[[Queries/TYNDP2024 Integration]]"
+    - "[[reproducible-research-template-patterns]]"
+    - "[[git-workflows-large-projects]]"
 ideas:
   raw_ideas: 0
   open_questions: 0
