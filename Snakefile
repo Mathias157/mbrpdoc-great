@@ -9,6 +9,7 @@ fresh clone — replace them once you have real analyses.
 from pathlib import Path
 
 from snakemake.utils import min_version
+include: "rules/download_tyndp2024.smk"
 
 configfile: "config/default.yaml"
 

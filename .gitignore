@@ -71,3 +71,6 @@ wiki/sources/papers/*.PDF
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Ignore data - will download or force commit
+data/
