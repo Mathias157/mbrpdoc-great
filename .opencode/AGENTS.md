@@ -89,3 +89,12 @@ vault, populated by the vault-sync skill. **Never edit files inside
 `wiki/.vault-mirror/`** — edits are overwritten on the next sync. Use it as input
 material: grep for keywords, cite findings in wiki pages, surface insights when
 relevant.
+
+**Fidelity rule (do not extrapolate from vault-mirror).** Mirrored notes are
+private shorthand the user wrote for themselves — often half-finished,
+exploratory, or contradictory. Treat them as **evidence of what the user has
+thought about**, not as prompts to elaborate on. When citing a mirrored note,
+quote or paraphrase only what is literally there; do not "complete" a fragment
+or infer what the user "probably meant". If a wiki page would benefit from
+content beyond what the mirror contains, ask the user — do not invent. See the
+"Fidelity Discipline" section in the repo-root `AGENTS.md` for the full rules.

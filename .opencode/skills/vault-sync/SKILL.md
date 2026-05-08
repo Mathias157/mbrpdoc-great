@@ -77,11 +77,38 @@ The actual sync is performed by `hooks/vault_sync.sh` which uses `rsync` for one
 
 7. **Surface insights**: scan the synced notes for any that touch active wiki topics. Report: "Note `<name>` references `[[topic]]` which has a wiki page — want me to update the topic page with anything from this note?"
 
+   **Fidelity rule when surfacing.** Quote the note's own wording or paraphrase
+   it tightly. Do **not** generate a summary that goes beyond what the note
+   says, and do **not** offer to "flesh out" a fragment. Mirrored notes are
+   the user's private shorthand — often half-formed or contradictory. Treat
+   them as evidence of what the user has thought about, not as prompts to
+   elaborate on the user's behalf. If the user's note is a one-liner, the
+   surfaced insight is also a one-liner.
+
 ## Read-Only Discipline
 
 - **NEVER edit files inside `wiki/.vault-mirror/`**. Edits will be overwritten on the next sync.
 - Treat `wiki/.vault-mirror/` as read-only input material.
 - If the user wants changes reflected back in the primary vault, they must edit the primary vault directly. The sync is one-way (vault → mirror) by design.
+
+## Fidelity Discipline (do not extrapolate from mirrored notes)
+
+The mirrored notes belong to the user. They are private shorthand — often
+fragmentary, exploratory, or contradictory. When other skills (paper-read,
+lit-search, research-companion, weekly-review) read mirrored notes, they must:
+
+- **Quote or paraphrase only what is literally there.** Do not infer what the
+  user "probably meant" or smooth a fragment into a paragraph.
+- **Surface notes as open threads, not as conclusions.** A mirrored note
+  reading "consider Balmorel under structural change" is evidence that the
+  user has flagged the question — it is **not** evidence of an answer. Cite it
+  as an open question, not as a finding.
+- **Mark gaps explicitly.** If a wiki page would benefit from content beyond
+  what the mirror contains, ask the user — do not invent the missing material.
+
+This rule exists because LLMs treating private notes as prompts have produced
+wiki pages that misrepresent the user's actual thinking. See the "Fidelity
+Discipline" section in the repo-root `AGENTS.md` for the full rules.
 
 ## Cross-Vault Linking (Obsidian)
 

@@ -86,6 +86,11 @@ To do this, read the relevant wiki pages and compare.
 
 If `wiki/.vault-mirror/` is non-empty, scan it (`grep` for keywords from the paper) and surface any prior thinking the user has captured in their primary vault that intersects with this paper.
 
+**Fidelity rule.** When citing a mirrored note, quote or paraphrase only what
+is literally there. Do not "complete" a fragment or guess what the user
+"probably meant". If a mirrored note is exploratory ("consider X under Y"),
+surface it as an open thread, **not** as a conclusion.
+
 ### 2f. Gaps and Opportunities
 
 What does this paper NOT address that the researcher's work could fill? Be specific.
@@ -103,7 +108,7 @@ Announce: "What would you like to discuss about this paper? I have your wiki con
 During discussion:
 
 - **Cross-reference with wiki**: When the user asks about a concept, pull up the relevant wiki page and compare the paper's treatment to what's already in the knowledge base.
-- **Connect to vault-mirror**: If the discussion touches notes the user has in their primary vault (mirrored under `wiki/.vault-mirror/`), mention them. Example: "This relates to your note `wiki/.vault-mirror/Project/Open Questions.md` on validation under structural change."
+- **Connect to vault-mirror**: If the discussion touches notes the user has in their primary vault (mirrored under `wiki/.vault-mirror/`), mention them. Example: "This relates to your note `wiki/.vault-mirror/Project/Open Questions.md` on validation under structural change." Quote or paraphrase only what is literally in the note — do not infer what the user "probably meant" or extend a fragment into a conclusion.
 - **Challenge claims**: Don't just summarise — push back on weak claims, note missing controls, highlight reproducibility risks, ask whether the findings would replicate.
 - **Position against the researcher's work**: Help the user see how their work relates.
 
@@ -116,6 +121,14 @@ Continue discussion until the user is satisfied or says "ingest" / "skip" / "don
 **Goal:** Integrate the paper into the wiki following established protocols.
 
 Ask: "Would you like to ingest this paper into the wiki? Options: (a) Full ingest, (b) Partial (specific pages only), (c) Skip."
+
+**Fidelity discipline (mandatory).** Wiki updates condense the paper, they do
+not extrapolate from it. Every sentence you add must be traceable to (a) the
+paper itself, (b) an existing wiki page, or (c) something the user said in
+this session. Do not write "this approach could be extended to Z" unless the
+paper says so or the user asked for synthesis. Prefer a 3-line bullet over a
+30-line section that pads with speculation. See the "Fidelity Discipline"
+section in the repo-root `AGENTS.md`.
 
 If ingesting, follow the wiki protocol from `wiki/AGENTS.md` and `wiki/wiki.schema.md`:
 

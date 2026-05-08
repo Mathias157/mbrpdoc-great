@@ -9,6 +9,27 @@ project-wide context; this file is the wiki-specific protocol.
 2. Read `wiki/index.md` — the content catalog.
 3. Read `wiki/meta/principles/academic-writing.md` for prose quality.
 
+## Fidelity Rule (read before any write)
+
+**Wiki pages condense input. They never extrapolate from it.**
+
+- Every claim on a wiki page must trace to a specific source: a paper in
+  `wiki/sources/papers/`, a note in `wiki/.vault-mirror/`, a chat exchange, or
+  an explicit user statement. If you cannot point to the source, do not write
+  the claim.
+- Do not "complete" half-formed notes from `wiki/.vault-mirror/`. Quote or
+  paraphrase only what is literally there. Mark genuine gaps with
+  `TODO: <what's missing>` rather than inventing.
+- Do not generate synthesis ("X implies Y", "this generalises to Z") unless the
+  source said so or the user explicitly asked. When the user asks for
+  synthesis, label it: `> [!synthesis]` callout or a "Synthesis (LLM-generated)"
+  heading.
+- Prefer compression. Default to shorter pages. A 200-word topic update beats
+  a 1500-word update built on speculation.
+
+See the "Fidelity Discipline" section in the repo-root `AGENTS.md` for the full
+rules and examples.
+
 ## Wiki Operations (Summary)
 
 ### Ingest a Source
@@ -53,3 +74,14 @@ Obsidian vault, populated by the **vault-sync** skill. Treat it as input
 material for ingestion — surface insights from those notes when relevant, but
 **never edit files inside `vault-mirror/`** (changes will be overwritten on the
 next sync).
+
+**Fidelity reminder.** Mirrored notes are the user's own private shorthand —
+often fragmentary, exploratory, or contradictory. They are **evidence of what
+the user has thought about**, not a prompt for the LLM to expand on the user's
+behalf. When citing a mirrored note in a wiki page:
+
+- Quote or paraphrase only what is literally there.
+- Surface the note as an open thread (e.g., "user has flagged X as an open
+  question, see `vault-mirror/<path>`") rather than inventing what the
+  exploration would have concluded.
+- If you need more content than the mirror provides, ask the user.

@@ -52,7 +52,7 @@ Before any search, in parallel:
 1. Read `wiki/index.md` and `wiki/queries/<topic>/memory-bank.md` (if it exists) to avoid duplicate discoveries.
 2. `glob wiki/topics/*.md` and `wiki/syntheses/*.md` to spot existing wiki coverage of the topic — if a topic page already exists, flag it before creating a new lit-search workspace.
 3. Read `wiki/wiki.schema.md` (page types, naming conventions, linking rules).
-4. If `wiki/.vault-mirror/` is non-empty, `grep` it for the topic — the user may have prior notes on this subfield.
+4. If `wiki/.vault-mirror/` is non-empty, `grep` it for the topic — the user may have prior notes on this subfield. **Fidelity rule:** treat mirrored notes as evidence of what the user has thought about, not as prompts to elaborate. Quote or paraphrase only what is literally there.
 
 Announce to the user what prior coverage exists, then proceed.
 
@@ -183,3 +183,4 @@ After graduation, the `wiki/queries/<topic>/` workspace stays — it's the audit
 - **The multi-angle round is not optional.** If you catch yourself presenting a result table after only direct-concept searches, stop and run the three angles.
 - **Prefer the user's vocabulary in the short-id and mind-graph**, but make sure the memory-bank captures synonyms in `Notes:` so future searches don't miss the paper.
 - **Chain, don't reimplement.** Deep-reading, ingesting, and PDF download all belong to paper-read. Idea triangulation belongs to research-companion. Stay in your lane.
+- **Condense, don't extrapolate.** Memory-bank `Abstract` and `Notes` fields paraphrase the paper's own wording. Do not infer findings the abstract doesn't state. Mind-graph descriptions summarise the user's stated framing of sub-themes — do not invent a new taxonomy of the field. See "Fidelity Discipline" in the repo-root `AGENTS.md`.

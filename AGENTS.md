@@ -115,6 +115,44 @@ wiki pages, surface insights when relevant.
 If the user wants content reflected back in their primary vault, they edit the
 primary vault directly.
 
+### Fidelity Discipline (no extrapolation)
+
+**All wiki documentation must be a condensation of input, never an extrapolation
+from it.** This applies to every page you write or edit — topic pages, entity
+pages, syntheses, queries, research evaluations.
+
+Rules:
+
+1. **Cite or omit.** Every claim, finding, or quote on a wiki page must be
+   traceable to a specific source: a paper in `wiki/sources/papers/`, a note in
+   `wiki/.vault-mirror/`, a chat exchange, or an explicit user statement. If
+   you cannot point to the source, do not write the claim.
+2. **No filling in gaps.** If `wiki/.vault-mirror/` contains a half-formed note,
+   do **not** complete the thought, infer what the user "probably meant", or
+   smooth a fragment into a paragraph. Quote or paraphrase only what is there.
+   Mark genuine gaps with `TODO: <what's missing>` rather than inventing.
+3. **No synthesis without explicit user request.** Do not write "X implies Y"
+   or "this generalises to Z" unless the source said so or the user asked for
+   synthesis. When the user asks for synthesis, label it: `> [!synthesis]` or a
+   "Synthesis (LLM-generated)" heading.
+4. **Prefer shorter over longer.** Default to compression. A 200-word topic
+   update beats a 1500-word topic update built on speculation. If you find
+   yourself padding a section, stop and cut it instead.
+5. **Vault-mirror is read-only input, not a prompt.** Notes in
+   `wiki/.vault-mirror/` are seeds the user wrote for themselves — they are
+   often shorthand, exploratory, or contradictory. Treat them as evidence of
+   what the user has thought about, **not** as a license to expand on the
+   user's behalf. If a mirrored note contains "consider Balmorel under
+   structural change", the wiki may say "user has flagged Balmorel under
+   structural change as an open question (`vault-mirror/<path>`)" — it must
+   **not** invent what that exploration would conclude.
+6. **Distinguish observation from interpretation.** When a section mixes both,
+   separate them: facts in plain prose, interpretation under a clearly labelled
+   "Interpretation" or "Open questions" subhead.
+
+If you catch yourself writing prose that has no anchor in a source you've read
+this session, delete it.
+
 ### Cross-Vault Linking
 
 Project notes from the primary vault can link to project-wiki pages and vice
