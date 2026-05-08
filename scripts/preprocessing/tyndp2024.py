@@ -13,7 +13,7 @@ Created on 08.05.2026
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
+from pybalmorel import Balmorel
 import click
 
 # ------------------------------- #
@@ -75,13 +75,21 @@ def main():
 def datacenterload(scenario):
     """scenario: Either DE (distributed energy) or GA (global ambition)"""
 
+    # Get TYNDP2024 data
     df = load_tyndp_demand_output()
     sc_idx = (
         df.columns.str.contains(scenario)
         | df.columns.str.contains("REF")
         | df.columns.str.contains("COUNTRY")
     )
-    print(df.query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"').loc[:, sc_idx])
+    df = df.query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"').loc[:, sc_idx]
+    print(df)
+
+    # Get Balmorel regions
+    m = Balmorel("scripts/Balmorel")
+    m.load_incfiles("base")
+    IR = m.get_input("IR")
+    print(IR)
 
 
 if __name__ == "__main__":
