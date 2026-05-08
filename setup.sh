@@ -112,6 +112,8 @@ except Exception as e:
     sys.exit(0)
 data["domain"] = "$DOMAIN"
 data["project_short_name"] = "$PROJECT_SHORT_NAME"
+data["institute"] = "$INSTITUTE"
+data["description"] = "$SHORT_DESCRIPTION"
 if "$PRIMARY_VAULT" and "$PROJECT_PATH_IN_VAULT":
     data.setdefault("vault_sync", {})
     data["vault_sync"]["primary_vault"] = "$PRIMARY_VAULT"
@@ -120,9 +122,9 @@ if "$PRIMARY_VAULT" and "$PROJECT_PATH_IN_VAULT":
 with open("$STATE_FILE", "w") as f:
     yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
 EOF
-        action "research-state.yaml updated (domain, project_short_name${PRIMARY_VAULT:+, vault_sync})"
+        action "research-state.yaml updated (domain, project_short_name, institute, description${PRIMARY_VAULT:+, vault_sync})"
     else
-        echo "  [check] would update research-state.yaml: domain, project_short_name${PRIMARY_VAULT:+, vault_sync}"
+        echo "  [check] would update research-state.yaml: domain, project_short_name, institute, description${PRIMARY_VAULT:+, vault_sync}"
     fi
 fi
 
@@ -160,8 +162,9 @@ elif [ -f "$PREAMBLE_FILE" ]; then
     echo "  [check] would update report/preamble.tex: title, author"
 fi
 # Note: abstract lives in main.tex as a placeholder; user customises post-setup.
-# Institute isn't wired into the default LaTeX article class — add a custom
-# command in preamble.tex if you want it on the title page.
+# Institute and short description are stored in research-state.yaml for skills
+# to consume. The default LaTeX article class has no native \institute — add a
+# custom command in preamble.tex if you want it on the title page.
 
 # 4. Auto-commit marker
 if [ "$WANT_AUTOCOMMIT" = "yes" ] && [ "$CHECK_ONLY" -eq 0 ]; then

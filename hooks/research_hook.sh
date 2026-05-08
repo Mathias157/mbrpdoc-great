@@ -130,7 +130,7 @@ esac
 
 # --- Manuscript / report drafts ---
 case "$FILE_PATH" in
-    */report/*.md|*/manuscript/*.tex|*draft*|*paper_draft*)
+    */report/*.md|*/manuscript/*.tex|*paper_draft*|*draft*)
         DOC_NAME=$(basename "$FILE_PATH")
         emit_event "writing:edit" "Edited: $DOC_NAME" "hook"
         update_state_timestamp

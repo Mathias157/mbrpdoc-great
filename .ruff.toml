@@ -2,6 +2,13 @@ line-length = 88
 preview = true # required to activate many pycodestyle errors and warnings as of 2024-05-01
 builtins = ["snakemake"]
 
+# Vendored / generated paths excluded from lint+format.
+extend-exclude = [
+    "scripts/Balmorel",  # upstream-vendored model code; not ours to lint
+    ".snakemake",
+    "build",
+]
+
 [format]
 quote-style = "double"
 indent-style = "space"
