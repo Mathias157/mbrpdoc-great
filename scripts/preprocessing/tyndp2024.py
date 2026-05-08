@@ -64,11 +64,24 @@ def load_tyndp_demand_output():
 # ------------------------------- #
 
 
-@click.command()
+@click.group()
 def main():
 
+    pass
+
+
+@main.command()
+@click.argument("scenario", default="DE", type=str)
+def datacenterload(scenario):
+    """scenario: Either DE (distributed energy) or GA (global ambition)"""
+
     df = load_tyndp_demand_output()
-    print(df.query('SUBSECTOR == "Datacenters"'))
+    sc_idx = (
+        df.columns.str.contains(scenario)
+        | df.columns.str.contains("REF")
+        | df.columns.str.contains("COUNTRY")
+    )
+    print(df.query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"').loc[:, sc_idx])
 
 
 if __name__ == "__main__":
