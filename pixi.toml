@@ -32,6 +32,7 @@ graphviz = "*"
 ruff = "*"
 yamllint = "*"
 shellcheck = "*"
+pyxlsb = ">=1.0.10,<2"
 
 # --- Tasks ---
 [tasks]
@@ -40,3 +41,6 @@ test = "snakemake test --cores 4"
 dag = "snakemake dag --cores 1"
 clean = "snakemake clean"
 "clean-all" = "snakemake clean && rm -rf build/"
+
+[pypi-dependencies]
+pybalmorel = ">=1.1.9, <2"
