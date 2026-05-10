@@ -36,7 +36,11 @@ rule plot:
     message: "Visualises the demo results."
     input:
         results=rules.run.output,
-    output: "build/plot.png"
+    params:
+        dark_plots=config["dark_plots"],
+        dark_colourmap=config["dark_colourmap"],
+        white_colourmap=config["white_colourmap"]
+    output: "build/plot.pdf"
     script: "scripts/vis.py"
 
 
