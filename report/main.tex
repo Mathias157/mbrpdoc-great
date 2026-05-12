@@ -13,16 +13,45 @@ A short description of your research project.
 \newpage
 
 \section{Introduction}
-\input{sections/01-introduction}
+
+This is the introduction. Replace this with your content.
+
 
 \section{Methods}
-\input{sections/02-methods}
+
+This is the methods section. Describe your approach here.
 
 \section{Results}
-\input{sections/03-results}
+
+
+\subsection{Linear Model}
+
+Figure~\ref{fig:linear-model} shows the results.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{figures/plot.pdf}
+  \caption{The linear model.}
+  \label{fig:linear-model}
+\end{figure}
 
 \section{Conclusion}
-\input{sections/04-conclusion}
+
+Summary of findings and future work.
+
+\appendix
+\section{Input Assumptions}
+
+Figure~\ref{fig:datacenter_demand} shows the assumptions for electricity demand from
+datacenters. The load profile is assumed constant, and a corresponding demand response
+potential is assumed for configurations with flexible datacenter demand.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{figures/datacenter_electricity_consumption.pdf}
+  \caption{Assumptions for annual datacenter electricity demands, based on TYNDP 2024.}
+  \label{fig:datacenter_demand}
+\end{figure}
 
 % Bibliography
 \bibliography{bibliography}

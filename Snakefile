@@ -65,6 +65,8 @@ rule latex_report:
     output: "build/report.pdf"
     shell:
         """
+        cp build/plot.pdf report/figures/
+        cp wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf report/figures/
         cd report
         latexmk -pdf main.tex
         mv ../build/main.pdf ../build/report.pdf
