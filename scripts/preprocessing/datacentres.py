@@ -69,7 +69,7 @@ def load_excel_sheet(filename, sheet_name, headers):
 @click.pass_context
 def main(ctx, dark):
     # Apply color-deficiency-friendly palettes globally
-    fc = setup_plot(dark=dark)
+    fc = setup_plot(dark=dark, colour_range=tuple(range(0, 255, int(255 / 40))))
     ctx.ensure_object(dict)
     ctx.obj["facecolor"] = fc
 

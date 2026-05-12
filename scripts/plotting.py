@@ -13,7 +13,11 @@ import yaml
 # ------------------------------- #
 
 
-def setup_plot(colourmap: str = "", dark: bool = False):
+def setup_plot(
+    colourmap: str = "",
+    dark: bool = False,
+    colour_range: tuple = tuple(range(0, 255, 52)),
+):
     """
     Replace matplotlib's default colormap with cmcrameri (perceptually uniform,
     color-deficiency friendly) and set related style parameters.
@@ -42,14 +46,7 @@ def setup_plot(colourmap: str = "", dark: bool = False):
     # Optional: set line color cycle for multi-line plots
     # Uses a subset of cmcrameri colors that are distinguishable across color-vision deficiencies
     plt.rcParams["axes.prop_cycle"] = plt.cycler(  # type: ignore
-        color=[
-            getattr(cmc, colourmap)(0),
-            getattr(cmc, colourmap)(52),
-            getattr(cmc, colourmap)(104),
-            getattr(cmc, colourmap)(156),
-            getattr(cmc, colourmap)(208),
-            getattr(cmc, colourmap)(257),
-        ]
+        color=[getattr(cmc, colourmap)(i) for i in colour_range]
     )
 
     # Improve figure defaults
