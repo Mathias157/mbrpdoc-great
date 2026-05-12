@@ -145,13 +145,8 @@ def datacenterload(ctx, scenario):
     df_interp.loc["DE4-S", :] = df_interp.loc["DE", :]
     df_interp.loc["DE4-N", :] = df_interp.loc["DE", :]
     df_interp = df_interp.drop(index=["DK", "SE", "DE"])
-    # Use EU average and population + area to extrapolate to remaining 13 regions? (NO, UK, etc?)
-    # df_interp.loc["NO", :] = df_interp.loc["NO", :] / 5
-    # df_interp.loc["NO1", :] = df_interp.loc["NO", :]
-    # df_interp.loc["NO2", :] = df_interp.loc["NO", :]
-    # df_interp.loc["NO3", :] = df_interp.loc["NO", :]
-    # df_interp.loc["NO4", :] = df_interp.loc["NO", :]
-    # df_interp.loc["NO5", :] = df_interp.loc["NO", :]
+
+    # Making no assumptions for non-EU member states, i.e.: no demand for datacentres.
 
     df_interp.to_csv("scripts/Balmorel/base/data/DE_DATACENTER.inc")
 
