@@ -20,11 +20,22 @@ rule all:
     message: "Run entire analysis and compile LaTeX report."
     input:
         "build/report.pdf",
-        "build/test.success"
+        "build/test.success",
 
+rule preprocessing:
+    message: "Pre-processing raw data to Balmorel input"
+    input:
+        results=rules.validate_tyndp2024.output,
+        script="scripts/preprocessing/tyndp2024.py"
+    output:
+        "scripts/Balmorel/base/data/DE_DATACENTER.inc"
+    shell:
+        "python scripts/preprocessing/tyndp2024.py datacenterload"
 
 rule run:
     message: "Runs the demo model."
+    input:
+        "scripts/Balmorel/base/data/DE_DATACENTER.inc"
     params:
         slope=config["slope"],
         x0=config["x0"],

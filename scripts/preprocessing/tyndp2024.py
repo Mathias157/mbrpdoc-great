@@ -76,7 +76,7 @@ def load_tyndp_demand_output():
 @click.pass_context
 def main(ctx, dark):
     # Apply color-deficiency-friendly palettes globally
-    fc = setup_plot("batlowW", dark=dark)
+    fc = setup_plot(dark=dark)
     ctx.ensure_object(dict)
     ctx.obj["facecolor"] = fc
 
@@ -95,14 +95,16 @@ def datacenterload(ctx, scenario):
         | df.columns.str.contains("COUNTRY")
     )
     df = (
-        df.query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"')
+        df
+        .query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"')
         .loc[:, sc_idx]
         .pivot_table(index="COUNTRY")
     )
 
     # Format years
     df.columns = (
-        df.columns.str.replace(" ", "")
+        df.columns.str
+        .replace(" ", "")
         .str.replace(r"[a-zA-Z ]", "", regex=True)
         .astype(int)
     )
@@ -150,7 +152,8 @@ def datacenterload(ctx, scenario):
     # df_interp.loc["NO3", :] = df_interp.loc["NO", :]
     # df_interp.loc["NO4", :] = df_interp.loc["NO", :]
     # df_interp.loc["NO5", :] = df_interp.loc["NO", :]
-    print(df_interp)
+
+    df_interp.to_csv("scripts/Balmorel/base/data/DE_DATACENTER.inc")
 
 
 if __name__ == "__main__":

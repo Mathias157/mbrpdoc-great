@@ -18,7 +18,7 @@ TYNDP_URLS = {
 }
 
 TYNDP_TARGET_DIR = "data/tyndp-2024"
-TYNDP_DOWNLOAD_TIMESTAMP = datetime.now().isoformat()
+TYNDP_DOWNLOAD_TIMESTAMP = datetime.now().strftime("%Y")
 
 # Rule: Download all TYNDP2024 files
 rule download_tyndp2024:
