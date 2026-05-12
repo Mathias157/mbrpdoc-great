@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import click
 
 from scripts.plotting import setup_plot
@@ -28,9 +29,9 @@ from scripts.plotting import setup_plot
 # ------------------------------- #
 
 
-def load_tyndp_demand_output():
+def load_excel_sheet(filename, sheet_name, headers):
     """
-    Load TYNDP 2024 demand output data from sheet "3_DEMAND_OUTPUT".
+    Load excel file with sheet name
 
     Returns:
         pd.DataFrame: Demand output data indexed by region/scenario combinations.
@@ -39,28 +40,20 @@ def load_tyndp_demand_output():
         FileNotFoundError: If TYNDP2024 file not found.
         ValueError: If sheet "3_DEMAND_OUTPUT" not found or is empty.
     """
-    tyndp_file = (
-        "data/tyndp-2024/Demand_Scenarios_TYNDP_2024_After_Public_Consultation.xlsb"
-    )
-    sheet_name = "3_DEMAND_OUTPUT"
-
     try:
-        df = pd.read_excel(tyndp_file, sheet_name=sheet_name, header=[0, 1])
+        df = pd.read_excel(filename, sheet_name=sheet_name, header=headers)
         if df.empty:
             raise ValueError(f"Sheet '{sheet_name}' is empty")
-        df.columns = [df.columns[i][1] for i in range(10)] + [
-            f"{df.columns[i][0]} {df.columns[i][1]}" for i in range(10, 15)
-        ]
         return df
     except FileNotFoundError:
         raise FileNotFoundError(
-            f"TYNDP2024 file not found at {tyndp_file}. "
+            f"File not found at {filename}. "
             "Ensure data has been downloaded via Snakemake rule 'download_data'."
         )
     except ValueError as e:
         if "does not contain sheet" in str(e):
             raise ValueError(
-                f"Sheet '{sheet_name}' not found in {tyndp_file}. "
+                f"Sheet '{sheet_name}' not found in {filename}. "
                 "Check available sheets with: pd.read_excel(..., sheet_name=None)"
             )
         raise
@@ -88,7 +81,14 @@ def datacenterload(ctx, scenario):
     """scenario: Either DE (distributed energy) or GA (global ambition)"""
 
     # Get TYNDP2024 data
-    df = load_tyndp_demand_output()
+    tyndp_file = (
+        "data/tyndp-2024/Demand_Scenarios_TYNDP_2024_After_Public_Consultation.xlsb"
+    )
+    sheet_name = "3_DEMAND_OUTPUT"
+    df = load_excel_sheet(tyndp_file, sheet_name, [0, 1])
+    df.columns = [df.columns[i][1] for i in range(10)] + [
+        f"{df.columns[i][0]} {df.columns[i][1]}" for i in range(10, 15)
+    ]
     sc_idx = (
         df.columns.str.contains(scenario)
         | df.columns.str.contains("REF")
@@ -109,31 +109,25 @@ def datacenterload(ctx, scenario):
         .astype(int)
     )
 
+    # Get AF25 data
+    filename = "data/af25/AF25.xlsx"
+    sheet_name = "Elforbrug"
+    df_af25 = load_excel_sheet(filename, sheet_name, 131)
+    df_af25 = df_af25.iloc[:2, 2:]
+    df_af25["COUNTRY"] = ["DK1", "DK2"]
+    df_af25 = df_af25.pivot_table(index="COUNTRY", aggfunc=lambda x: np.sum(x) / 1e3)
+    df_af25.columns = df_af25.columns.astype(int)
+
     # Interpolate
+    df = pd.concat((df, df_af25))
     years_to_interp = (
         list(range(2020, 2030)) + list(range(2031, 2040)) + list(range(2041, 2050))
     )
     df_expanded = df.reindex(columns=sorted(set(df.columns) | set(years_to_interp)))
     df_interp = df_expanded.interpolate(axis=1)
 
-    # Plot
-    fig, ax = plt.subplots()
-    df_interp.T.plot(ax=ax, kind="area")
-    ax.set_facecolor(ctx.obj["facecolor"])
-    ax.legend(loc="center right", bbox_to_anchor=(1.35, 0.5), ncols=2)
-    ax.set_xlim([2019, 2050])
-    ax.set_ylabel("Datacenter Electricity Consumption [TWh]")
-    fig.savefig(
-        "wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf",
-        bbox_inches="tight",
-        transparent=True,
-    )
-
     # Assume even distribution of datacentres to bidding zones
     df_interp.index = df_interp.index.str.replace("FI", "FIN")
-    df_interp.loc["DK", :] = df_interp.loc["DK", :] / 2
-    df_interp.loc["DK1", :] = df_interp.loc["DK", :]
-    df_interp.loc["DK2", :] = df_interp.loc["DK", :]
     df_interp.loc["SE", :] = df_interp.loc["SE", :] / 4
     df_interp.loc["SE1", :] = df_interp.loc["SE", :]
     df_interp.loc["SE2", :] = df_interp.loc["SE", :]
@@ -145,6 +139,19 @@ def datacenterload(ctx, scenario):
     df_interp.loc["DE4-S", :] = df_interp.loc["DE", :]
     df_interp.loc["DE4-N", :] = df_interp.loc["DE", :]
     df_interp = df_interp.drop(index=["DK", "SE", "DE"])
+
+    # Plot
+    fig, ax = plt.subplots()
+    df_interp.T.plot(ax=ax, kind="area")
+    ax.set_facecolor(ctx.obj["facecolor"])
+    ax.legend(loc="center right", bbox_to_anchor=(1.5, 0.5), ncols=2)
+    ax.set_xlim([2025, 2050])
+    ax.set_ylabel("Datacenter Electricity Consumption [TWh]")
+    fig.savefig(
+        "wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
 
     # Making no assumptions for non-EU member states, i.e.: no demand for datacentres.
 

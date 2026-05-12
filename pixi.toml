@@ -34,6 +34,7 @@ yamllint = "*"
 shellcheck = "*"
 pyxlsb = ">=1.0.10,<2"
 cmcrameri = ">=1.9,<2"
+openpyxl = ">=3.1.5,<4"
 
 # --- Tasks ---
 [tasks]

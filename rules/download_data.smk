@@ -3,7 +3,6 @@
 # This rule demonstrates the pattern for data acquisition:
 # - Download from remote URL
 # - Extract/preprocess into data/ directory
-# - Log metadata (source, access date, format)
 #
 # Usage: Add to rules/ directory, then include in Snakefile:
 #   include: "rules/download_data.smk"
@@ -39,8 +38,6 @@ rule download_tyndp2024:
     output:
         demand=expand("{dir}/Demand_Scenarios_TYNDP_2024_After_Public_Consultation.xlsb", dir=TYNDP_TARGET_DIR),
         reference_grid=expand("{dir}/20231103 - Electricity and Hydrogen Reference Grid & Investment Candidates.xlsx", dir=TYNDP_TARGET_DIR),
-        line_data=expand("{dir}/line_data/", dir=TYNDP_TARGET_DIR),
-        metadata=expand("{dir}/README.md", dir=TYNDP_TARGET_DIR),
     params:
         timestamp=TYNDP_DOWNLOAD_TIMESTAMP,
         demand_url=TYNDP_URLS["demand_scenarios"],
