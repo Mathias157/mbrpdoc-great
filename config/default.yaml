@@ -3,8 +3,8 @@
 
 slope: 4
 x0: 5
-white_colourmap: batlowW
-dark_colourmap: batlowW_r
+white_colourmap: managua
+dark_colourmap: hawaii_r
 dark_plots: false
 
 
