@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import click
+from pybalmorel import IncFile
 
 from scripts.plotting import setup_plot
 
@@ -127,6 +128,7 @@ def datacenterload(ctx, scenario):
     df_interp = df_expanded.interpolate(axis=1)
 
     # Assume even distribution of datacentres to bidding zones
+    # NOTE: Making no assumptions for non-EU member states, i.e.: no demand for datacentres in Norway, UK etc.
     df_interp.index = df_interp.index.str.replace("FI", "FIN")
     df_interp.loc["SE", :] = df_interp.loc["SE", :] / 4
     df_interp.loc["SE1", :] = df_interp.loc["SE", :]
@@ -153,9 +155,17 @@ def datacenterload(ctx, scenario):
         transparent=True,
     )
 
-    # Making no assumptions for non-EU member states, i.e.: no demand for datacentres.
+    # Make .inc file
+    df_interp = df_interp.drop(columns=[2019 + i for i in range(6)]).T * 1e6
+    df_interp.columns = [f"{region} . DATACENTER" for region in df_interp.columns]
 
-    df_interp.to_csv("scripts/Balmorel/base/data/DE_DATACENTER.inc")
+    IncFile(
+        name="DE_DATACENTER",
+        path="scripts/Balmorel/base/data",
+        prefix="TABLE   DE(YYY,RRR,DEUSER)   'Annual electricity consumption (MWh)'\n",
+        body=df_interp,
+        suffix="\n;",
+    ).save()
 
 
 if __name__ == "__main__":

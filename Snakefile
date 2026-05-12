@@ -25,7 +25,8 @@ rule all:
 rule preprocessing:
     message: "Pre-processing raw data to Balmorel input"
     input:
-        results=rules.validate_tyndp2024.output,
+        tyndp=rules.validate_tyndp2024.output,
+        af25=rules.download_af25.output,
         script="scripts/preprocessing/datacentres.py"
     output:
         "scripts/Balmorel/base/data/DE_DATACENTER.inc"
