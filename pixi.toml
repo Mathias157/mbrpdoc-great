@@ -33,6 +33,7 @@ ruff = "*"
 yamllint = "*"
 shellcheck = "*"
 pyxlsb = ">=1.0.10,<2"
+cmcrameri = ">=1.9,<2"
 
 # --- Tasks ---
 [tasks]

@@ -11,10 +11,17 @@ Created on 08.05.2026
 #        0. Script Settings       #
 # ------------------------------- #
 
+import sys
+from pathlib import Path
+
+# Add repo root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import matplotlib.pyplot as plt
 import pandas as pd
-from pybalmorel import Balmorel
 import click
+
+from scripts.plotting import setup_plot
 
 # ------------------------------- #
 #          1. Functions           #
@@ -65,14 +72,19 @@ def load_tyndp_demand_output():
 
 
 @click.group()
-def main():
-
-    pass
+@click.option("--dark", is_flag=True, help="Make dark plot?")
+@click.pass_context
+def main(ctx, dark):
+    # Apply color-deficiency-friendly palettes globally
+    fc = setup_plot("batlowW", dark=dark)
+    ctx.ensure_object(dict)
+    ctx.obj["facecolor"] = fc
 
 
 @main.command()
 @click.argument("scenario", default="DE", type=str)
-def datacenterload(scenario):
+@click.pass_context
+def datacenterload(ctx, scenario):
     """scenario: Either DE (distributed energy) or GA (global ambition)"""
 
     # Get TYNDP2024 data
@@ -82,14 +94,63 @@ def datacenterload(scenario):
         | df.columns.str.contains("REF")
         | df.columns.str.contains("COUNTRY")
     )
-    df = df.query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"').loc[:, sc_idx]
-    print(df)
+    df = (
+        df.query('SUBSECTOR == "Datacenters" and COUNTRY != "EU"')
+        .loc[:, sc_idx]
+        .pivot_table(index="COUNTRY")
+    )
 
-    # Get Balmorel regions
-    m = Balmorel("scripts/Balmorel")
-    m.load_incfiles("base")
-    IR = m.get_input("IR")
-    print(IR)
+    # Format years
+    df.columns = (
+        df.columns.str.replace(" ", "")
+        .str.replace(r"[a-zA-Z ]", "", regex=True)
+        .astype(int)
+    )
+
+    # Interpolate
+    years_to_interp = (
+        list(range(2020, 2030)) + list(range(2031, 2040)) + list(range(2041, 2050))
+    )
+    df_expanded = df.reindex(columns=sorted(set(df.columns) | set(years_to_interp)))
+    df_interp = df_expanded.interpolate(axis=1)
+
+    # Plot
+    fig, ax = plt.subplots()
+    df_interp.T.plot(ax=ax, kind="area")
+    ax.set_facecolor(ctx.obj["facecolor"])
+    ax.legend(loc="center right", bbox_to_anchor=(1.35, 0.5), ncols=2)
+    ax.set_xlim([2019, 2050])
+    ax.set_ylabel("Datacenter Electricity Consumption [TWh]")
+    fig.savefig(
+        "wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+
+    # Assume even distribution of datacentres to bidding zones
+    df_interp.index = df_interp.index.str.replace("FI", "FIN")
+    df_interp.loc["DK", :] = df_interp.loc["DK", :] / 2
+    df_interp.loc["DK1", :] = df_interp.loc["DK", :]
+    df_interp.loc["DK2", :] = df_interp.loc["DK", :]
+    df_interp.loc["SE", :] = df_interp.loc["SE", :] / 4
+    df_interp.loc["SE1", :] = df_interp.loc["SE", :]
+    df_interp.loc["SE2", :] = df_interp.loc["SE", :]
+    df_interp.loc["SE3", :] = df_interp.loc["SE", :]
+    df_interp.loc["SE4", :] = df_interp.loc["SE", :]
+    df_interp.loc["DE", :] = df_interp.loc["DE", :] / 4
+    df_interp.loc["DE4-E", :] = df_interp.loc["DE", :]
+    df_interp.loc["DE4-W", :] = df_interp.loc["DE", :]
+    df_interp.loc["DE4-S", :] = df_interp.loc["DE", :]
+    df_interp.loc["DE4-N", :] = df_interp.loc["DE", :]
+    df_interp = df_interp.drop(index=["DK", "SE", "DE"])
+    # Use EU average and population + area to extrapolate to remaining 13 regions? (NO, UK, etc?)
+    # df_interp.loc["NO", :] = df_interp.loc["NO", :] / 5
+    # df_interp.loc["NO1", :] = df_interp.loc["NO", :]
+    # df_interp.loc["NO2", :] = df_interp.loc["NO", :]
+    # df_interp.loc["NO3", :] = df_interp.loc["NO", :]
+    # df_interp.loc["NO4", :] = df_interp.loc["NO", :]
+    # df_interp.loc["NO5", :] = df_interp.loc["NO", :]
+    print(df_interp)
 
 
 if __name__ == "__main__":
