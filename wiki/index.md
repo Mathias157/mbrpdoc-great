@@ -24,7 +24,7 @@
 
 ## Queries
 
-- [[great-scenario-data-sources]] — Data acquisition rules, sources, and assumptions for 9×9 GREAT scenario matrix; TYNDP2024 download template in `rules/download_tyndp2024.smk`
+- [[great-scenario-data-sources]] — Data acquisition rules, sources, and assumptions for 9×9 GREAT scenario matrix; TYNDP2024 download template in `rules/download_data.smk`
 - [[nested-submodules-hpc-setup]] — Step-by-step procedure for initializing nested submodules on HPC systems after cloning a repository
 
 ## Research Evaluations

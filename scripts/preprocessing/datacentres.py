@@ -55,7 +55,7 @@ def load_tyndp_demand_output():
     except FileNotFoundError:
         raise FileNotFoundError(
             f"TYNDP2024 file not found at {tyndp_file}. "
-            "Ensure data has been downloaded via Snakemake rule 'download_tyndp2024'."
+            "Ensure data has been downloaded via Snakemake rule 'download_data'."
         )
     except ValueError as e:
         if "does not contain sheet" in str(e):

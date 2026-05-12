@@ -24,7 +24,7 @@ Updated `wiki/index.md`: added [[great-scenarios]] to Topics section.
 ---
 
 **Snakemake Rule: TYNDP2024 Download**  
-Created `rules/download_tyndp2024.smk` — template rule demonstrating the data acquisition pattern:
+Created `rules/download_data.smk` — template rule demonstrating the data acquisition pattern:
 - Downloads demand scenarios, reference grid, and line data from ENTSOS
 - Extracts .zip archives to `data/tyndp-2024/`
 - Includes validation rule for sanity checks

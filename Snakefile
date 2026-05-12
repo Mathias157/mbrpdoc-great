@@ -9,7 +9,7 @@ fresh clone — replace them once you have real analyses.
 from pathlib import Path
 
 from snakemake.utils import min_version
-include: "rules/download_tyndp2024.smk"
+include: "rules/download_data.smk"
 
 configfile: "config/default.yaml"
 
@@ -26,11 +26,11 @@ rule preprocessing:
     message: "Pre-processing raw data to Balmorel input"
     input:
         results=rules.validate_tyndp2024.output,
-        script="scripts/preprocessing/tyndp2024.py"
+        script="scripts/preprocessing/datacentres.py"
     output:
         "scripts/Balmorel/base/data/DE_DATACENTER.inc"
     shell:
-        "python scripts/preprocessing/tyndp2024.py datacenterload"
+        "python scripts/preprocessing/datacentres.py datacenterload"
 
 rule run:
     message: "Runs the demo model."

@@ -275,7 +275,7 @@ data/
 └── assumptions-log.yaml      # Central registry of all assumptions
 ```
 
-**Snakemake workflow**: `rules/` contains rules for each data source. Example: `rules/download_tyndp2024.smk` downloads demand scenarios, reference grid, and line data into `data/tyndp-2024/`. Run with `snakemake download_tyndp2024`.
+**Snakemake workflow**: `rules/` contains rules for each data source. Example: `rules/download_data.smk` downloads demand scenarios, reference grid, and line data into `data/tyndp-2024/`. Run with `snakemake download_tyndp2024`.
 
 **Metadata**: Every downloaded dataset should have a `README.md` in its directory documenting source URL, access date, license, format, units, and preprocessing steps.
 
@@ -293,7 +293,7 @@ data/
 - Assumptions log: populate with specific values and revisit triggers
 
 ### To Do ⏳
-- [ ] Download TYNDP2024 data (use Snakemake rule in `rules/download_tyndp2024.smk`)
+- [ ] Download TYNDP2024 data (use Snakemake rule in `rules/download_data.smk`)
 - [ ] Extract & quantify EV pessimistic scenario from Consensus papers
 - [ ] Find or assume HP adoption barriers study
 - [ ] Find or assume industry electrification scenario
@@ -325,5 +325,5 @@ Related wiki pages (once created):
 **Last updated**: 2026-05-08  
 **Status**: DRAFT — awaiting data collection and assumption finalization
 
-**See also**: `rules/download_tyndp2024.smk` — template Snakemake rule for data acquisition
+**See also**: `rules/download_data.smk` — template Snakemake rule for data acquisition
 

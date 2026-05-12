@@ -6,7 +6,7 @@
 # - Log metadata (source, access date, format)
 #
 # Usage: Add to rules/ directory, then include in Snakefile:
-#   include: "rules/download_tyndp2024.smk"
+#   include: "rules/download_data.smk"
 
 from datetime import datetime
 
@@ -19,6 +19,9 @@ TYNDP_URLS = {
 
 TYNDP_TARGET_DIR = "data/tyndp-2024"
 TYNDP_DOWNLOAD_TIMESTAMP = datetime.now().strftime("%Y")
+AF25_URL = "https://ens.dk/media/7633/download"
+AF25_TARGET_DIR = "data/af25"
+AF25_DOWNLOAD_TIMESTAMP = datetime.now().strftime("%Y")
 
 # Rule: Download all TYNDP2024 files
 rule download_tyndp2024:
@@ -29,18 +32,15 @@ rule download_tyndp2024:
         - data/tyndp-2024/Demand_Scenarios_*.xlsb
         - data/tyndp-2024/Reference_Grid_*.xlsx
         - data/tyndp-2024/line_data/
-        - data/tyndp-2024/README.md (metadata)
 
     Notes:
-        - May require registration or authentication on ENTSOS portal
         - Files are provided as .zip archives; extracted automatically
-        - Metadata is logged for reproducibility
     """
     output:
         demand=expand("{dir}/Demand_Scenarios_TYNDP_2024_After_Public_Consultation.xlsb", dir=TYNDP_TARGET_DIR),
         reference_grid=expand("{dir}/20231103 - Electricity and Hydrogen Reference Grid & Investment Candidates.xlsx", dir=TYNDP_TARGET_DIR),
-        # line_data=expand("{dir}/line_data/", dir=TYNDP_TARGET_DIR),
-        # metadata=expand("{dir}/README.md", dir=TYNDP_TARGET_DIR),
+        line_data=expand("{dir}/line_data/", dir=TYNDP_TARGET_DIR),
+        metadata=expand("{dir}/README.md", dir=TYNDP_TARGET_DIR),
     params:
         timestamp=TYNDP_DOWNLOAD_TIMESTAMP,
         demand_url=TYNDP_URLS["demand_scenarios"],
@@ -72,6 +72,32 @@ rule download_tyndp2024:
 
         # Remove __MACOSX
         rm -rf {TYNDP_TARGET_DIR}/__MACOSX
+        """
+
+# Rule: Download AF25
+rule download_af25:
+    """
+    Download AF25 scenario data for demand in DK
+
+    Outputs:
+        - data/af25/AF25.xlsx
+
+    Notes:
+        - .xlsx is provided
+    """
+    output:
+        af25="data/af25/AF25.xlsx"
+    params:
+        timestamp=AF25_DOWNLOAD_TIMESTAMP,
+        af25_url=AF25_URL
+    shell:
+        """
+        # Ensure target directory exists
+        mkdir -p {AF25_TARGET_DIR}
+
+        # Download demand scenarios
+        echo "Downloading AF25 data..."
+        curl -L -o {AF25_TARGET_DIR}/AF25.xlsx "{params.af25_url}"
         """
 
 # Rule: Validate downloaded TYNDP2024 files
