@@ -74,3 +74,5 @@ wiki/sources/papers/*.PDF
 
 # Ignore data - will download or force commit
 data/
+wiki/.obsidian/graph.json
+wiki/.obsidian/workspace.json
