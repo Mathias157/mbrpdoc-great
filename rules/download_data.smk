@@ -109,7 +109,7 @@ rule validate_tyndp2024:
     output:
         validation_log=expand("{dir}/.validation_passed", dir=TYNDP_TARGET_DIR),
     shell:
-        """
+        r"""
         set -e
         dir={TYNDP_TARGET_DIR}
 
