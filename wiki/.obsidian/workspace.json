@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "topics/temporal-resolution.md",
+                "file": "queries/datacentre-flexibility/memory-bank.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "temporal-resolution"
+              "title": "memory-bank"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "wiki.schema.md",
+                "file": "queries/datacentre-flexibility/memory-bank.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for wiki.schema"
+              "title": "Backlinks for memory-bank"
             }
           },
           {
@@ -162,11 +162,15 @@
       "switcher:Open quick switcher": false,
       "graph:Open graph view": false,
       "canvas:Create new canvas": false,
-      "bases:Create new base": false
+      "bases:Create new base": false,
+      "vim-toggle:Toggle Vim Mode": false,
+      "command-palette:Open command palette": false
     }
   },
   "active": "8bf9cb81f6d829e1",
   "lastOpenFiles": [
+    "queries/great-scenario-data-sources.md",
+    "topics/temporal-resolution.md",
     "topics/temporal resolution.md",
     "wiki.schema.md"
   ]

@@ -4,5 +4,6 @@
   "attachmentFolderPath": "sources/papers",
   "alwaysUpdateLinks": true,
   "useMarkdownLinks": false,
-  "newLinkFormat": "shortest"
+  "newLinkFormat": "shortest",
+  "vimMode": true
 }
