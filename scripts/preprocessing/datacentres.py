@@ -156,15 +156,15 @@ def datacenterload(ctx, scenario):
     )
 
     # Make .inc file
-    df_interp = df_interp.drop(columns=[2019 + i for i in range(6)]).T * 1e6
-    df_interp.columns = [f"{region} . DATACENTER" for region in df_interp.columns]
+    df_interp = df_interp.drop(columns=[2019 + i for i in range(6)]) * 1e6
+    df_interp.index.name = ""
 
     IncFile(
         name="DE_DATACENTER",
         path="scripts/Balmorel/base/data",
-        prefix="TABLE   DE(YYY,RRR,DEUSER)   'Annual electricity consumption (MWh)'\n",
+        prefix="TABLE   DE_DATACENTER(RRR,YYY)   'Datacenter electricity consumption (MWh)'\n",
         body=df_interp,
-        suffix="\n;",
+        suffix="\n;\nDE(YYY,RRR,'DATACENTER')=DE_DATACENTER(RRR,YYY);\nDE_DATACENTER(RRR,YYY)=0;",
     ).save()
 
 
