@@ -4,6 +4,20 @@ Append-only chronological record of wiki operations. Most recent entries at the 
 
 ---
 
+## 2026-05-13
+
+**Lit-Search Workspace: Datacentre Flexibility**  
+Created `wiki/queries/datacentre-flexibility/` with:
+- `memory-bank.md` — 7 papers discovered (2 Tier-1, 3 Tier-2, 2 Tier-3) on datacentre demand response and workload migration
+- `mind-graph.md` — 4 sub-themes: DR potential & shiftability (20–50%), inter-regional migration feasibility, cost models, energy system integration gap
+- `references.bib` — BibTeX entries for all papers
+
+**Key finding**: Zhao et al. (2021, Energies) and Zhao et al. (2021, ACCTCS) provide direct cost/penalty model suitable for Balmorel DR parameterisation. Shiftability range 20–50% (Zhao et al., 2021; Ahmed et al., 2026). Inter-regional latency 10–100ms feasible for grid response (Zhu et al., 2020; Leniston et al., 2025).
+
+**Next steps**: (1) Deep-read Zhao et al. (2021, Energies); (2) Extend search for energy system modelling papers; (3) Draft scenario assumptions for GREAT datacentre flexibility dimension.
+
+---
+
 ## 2026-05-08 (continued)
 
 **Concept Page: IEA APS Scenario**  

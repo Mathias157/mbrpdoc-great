@@ -25,6 +25,7 @@
 ## Queries
 
 - [[great-scenario-data-sources]] — Data acquisition rules, sources, and assumptions for 9×9 GREAT scenario matrix; TYNDP2024 download template in `rules/download_data.smk`
+- [[datacentre-flexibility]] — Lit-search workspace on datacentre demand response potential & inter-regional workload migration; 7 papers, shiftability 20–50%, inter-regional latency 10–100ms
 - [[nested-submodules-hpc-setup]] — Step-by-step procedure for initializing nested submodules on HPC systems after cloning a repository
 
 ## Research Evaluations

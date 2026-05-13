@@ -10,7 +10,7 @@ session:
   last_paper_ingested: null
   last_companion_session: null
   last_writing_review: null
-  last_session: 2026-05-08T08:42:00Z
+  last_session: 2026-05-08 08:42:00+00:00
 wiki:
   total_pages: 13
   topics: 2
@@ -22,12 +22,12 @@ wiki:
   stale_pages: []
   last_ingest: null
   orphans:
-    - "[[GREAT Scenarios]]"
-    - "[[Topics/GREAT Scenarios Data]]"
-    - "[[Concepts/Scenario Design]]"
-    - "[[Queries/TYNDP2024 Integration]]"
-    - "[[reproducible-research-template-patterns]]"
-    - "[[git-workflows-large-projects]]"
+  - '[[GREAT Scenarios]]'
+  - '[[Topics/GREAT Scenarios Data]]'
+  - '[[Concepts/Scenario Design]]'
+  - '[[Queries/TYNDP2024 Integration]]'
+  - '[[reproducible-research-template-patterns]]'
+  - '[[git-workflows-large-projects]]'
 ideas:
   raw_ideas: 0
   open_questions: 0
@@ -44,8 +44,10 @@ vault_sync:
   - .trash
   - Attachments
   - '*.canvas'
-  last_sync_at: '2026-05-08T08:41:44'
+  last_sync_at: '2026-05-13T09:11:03'
 suggested_actions:
 - type: scenario_data
   reason: GREAT scenario data sources documented; now collect actual datasets
-  command: "See wiki/queries/great-scenario-data-sources.md — follow download rules in Rule 2–7. Prioritize: (1) TYNDP2024, (2) Consensus.app EV scenarios, (3) IEA H₂. Others can use documented assumptions initially."
+  command: 'See wiki/queries/great-scenario-data-sources.md — follow download rules
+    in Rule 2–7. Prioritize: (1) TYNDP2024, (2) Consensus.app EV scenarios, (3) IEA
+    H₂. Others can use documented assumptions initially.'
