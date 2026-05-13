@@ -7,6 +7,7 @@ Edit `rules/` files for additional analysis steps. The demo rules below
 fresh clone — replace them once you have real analyses.
 """
 from pathlib import Path
+from glob import glob
 
 from snakemake.utils import min_version
 include: "rules/download_data.smk"
@@ -56,18 +57,32 @@ rule plot:
     script: "scripts/vis.py"
 
 
+rule copy_figures:
+    message: "Copy figures to report directory."
+    params:
+        wiki_path="wiki/sources/analyses/plots",
+        build_path="build",
+        output_path="report/figures",
+    output:
+        glob("report/figures/*.pdf")
+    shell:
+        """
+        mkdir -p report/figures
+        cp {params.build_path}/plot.pdf {output.path}/
+        cp {params.wiki_path}/datacenter_electricity_consumption.pdf {output.path}/
+        """
+
+
 rule latex_report:
     message: "Compile LaTeX report via latexmk."
     input:
         main="report/main.tex",
         preamble="report/preamble.tex",
         bib="report/bibliography.bib",
-        plot=rules.plot.output,
+        figures=rules.copy_figures.output,
     output: "build/report.pdf"
     shell:
         """
-        cp build/plot.pdf report/figures/
-        cp wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf report/figures/
         cd report
         latexmk -pdf main.tex
         mv ../build/main.pdf ../build/report.pdf
@@ -75,6 +90,9 @@ rule latex_report:
 
 
 rule dag_dot:
+    input:
+        "Snakefile",
+        glob("rules/*.smk")
     output: temp("build/dag.dot")
     shell: "snakemake --rulegraph > {output}"
 
