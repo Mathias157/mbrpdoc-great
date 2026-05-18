@@ -7,10 +7,9 @@ Last updated: 2026-05-13
 - **Description**: Quantification of datacentre workload fraction that can be shifted in time or space (inter-regional migration) in response to grid signals.
 - **Related sub-themes**: Workload characterisation, latency constraints, cost models
 - **Key papers**:
-  - [zhao-datacentre-demand-2021] Zhao et al. (Energies 2021) — 20–50% shiftability; synthetic cost model for Balmorel DR parameterisation
-  - [zhao-datacentre-smartgrid-2021] Zhao et al. (ACCTCS 2021) — conference version; same shiftability range
+  - [zhao-datacentre-demand-2021] Zhao et al. (Energies 2021) — virtual datacentre model
 - **Other relevant papers**:
-  - [ahmed-iot-renewable-2026] Ahmed et al. (JOIV 2026) — cites 20–30% shiftability as industry rule-of-thumb
+  - [ahmed-iot-renewable-2026] Ahmed et al. (JOIV 2026) — article looking more generally into 'internet of things' devices contribution to grids
   - [fridgen-virtualizing-2015] Fridgen et al. (2015) — historical baseline; likely lower shiftability
 
 ---
