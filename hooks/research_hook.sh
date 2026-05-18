@@ -1,17 +1,19 @@
 #!/bin/bash
 # Research Hook — runs after Write|Edit tool use.
-# Updates research-state.yaml, emits events to events.jsonl, queues auto-commit.
+# Updates research-state.yaml, emits events to events.jsonl.
 #
 # Wired by OpenCode via the hook configuration in opencode.json (or by Claude Code
 # via .claude/settings.local.json).
 #
 # Reads tool input as JSON on stdin. Extracts the modified file path and dispatches
 # on the path pattern.
+#
+# NOTE: This hook does NOT commit anything. Commits are exclusively the user's
+# responsibility — agents in this repo are forbidden from running `git commit`.
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)"
 STATE_FILE="$REPO_ROOT/research-state.yaml"
 EVENTS_FILE="$REPO_ROOT/events.jsonl"
-AUTO_COMMIT="$REPO_ROOT/hooks/auto_commit.sh"
 
 # Read hook input from stdin (OpenCode/Claude Code feed JSON like
 #   { "tool_input": { "file_path": "..." } } )
@@ -32,9 +34,9 @@ if [ -z "$FILE_PATH" ]; then
     exit 0
 fi
 
-# Skip events.jsonl, research-state.yaml, and the commit-pending file to avoid recursion.
+# Skip events.jsonl and research-state.yaml to avoid recursion.
 case "$FILE_PATH" in
-    */events.jsonl|*research-state.yaml|*.commit-pending|*.commit-lock)
+    */events.jsonl|*research-state.yaml)
         exit 0
         ;;
 esac
@@ -75,7 +77,6 @@ case "$FILE_PATH" in
         emit_event "wiki:update" "Updated wiki page: $PAGE_NAME" "hook"
         update_state_timestamp
         echo "[Research Hook] Wiki page '$PAGE_NAME' updated."
-        [ -x "$AUTO_COMMIT" ] && bash "$AUTO_COMMIT" "$FILE_PATH"
         exit 0
         ;;
 esac
@@ -87,7 +88,6 @@ case "$FILE_PATH" in
         emit_event "research_evaluation:save" "Saved evaluation: $DOC_NAME" "hook"
         update_state_timestamp
         echo "[Research Hook] Research evaluation '$DOC_NAME' saved. Will surface in next research-session briefing."
-        [ -x "$AUTO_COMMIT" ] && bash "$AUTO_COMMIT" "$FILE_PATH"
         exit 0
         ;;
 esac
@@ -96,15 +96,14 @@ esac
 case "$FILE_PATH" in
     */wiki/index.md|*/wiki/log.md|*/wiki/wiki.schema.md)
         update_state_timestamp
-        [ -x "$AUTO_COMMIT" ] && bash "$AUTO_COMMIT" "$FILE_PATH"
         exit 0
         ;;
 esac
 
-# --- Vault-mirror files: never auto-commit (read-only mirror) ---
+# --- Vault-mirror files: read-only mirror, do nothing ---
 case "$FILE_PATH" in
     */vault-mirror/*)
-        # Mirror files are managed by hooks/vault_sync.sh; never commit edits via the hook.
+        # Mirror files are managed by hooks/vault_sync.sh and are read-only.
         echo "[Research Hook] vault-mirror file touched — note: vault-mirror is read-only. Edits will be lost on next sync."
         exit 0
         ;;
@@ -135,7 +134,6 @@ case "$FILE_PATH" in
         emit_event "writing:edit" "Edited: $DOC_NAME" "hook"
         update_state_timestamp
         echo "[Research Hook] Draft '$DOC_NAME' edited."
-        [ -x "$AUTO_COMMIT" ] && bash "$AUTO_COMMIT" "$FILE_PATH"
         exit 0
         ;;
 esac
@@ -145,7 +143,6 @@ case "$FILE_PATH" in
     */config/*.yaml|*/Snakefile|*/rules/*.smk|*/envs/*.yaml|*/profiles/*/config.yaml|*/opencode.json|*/AGENTS.md)
         emit_event "config:edit" "Edited config: $(basename "$FILE_PATH")" "hook"
         update_state_timestamp
-        [ -x "$AUTO_COMMIT" ] && bash "$AUTO_COMMIT" "$FILE_PATH"
         exit 0
         ;;
 esac

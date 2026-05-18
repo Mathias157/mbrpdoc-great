@@ -23,8 +23,8 @@ import numpy as np
 import click
 from pybalmorel import IncFile
 
-from scripts.utils.plotting import setup_plot
-from scripts.utils import load_excel_sheet
+from analysis.utils.plotting import setup_plot
+from analysis.utils import load_excel_sheet
 
 # ------------------------------- #
 #          1. Functions           #
@@ -132,7 +132,7 @@ def datacenterload(ctx, scenario):
 
     IncFile(
         name="DE_DATACENTER",
-        path="scripts/Balmorel/base/data",
+        path="analysis/Balmorel/base/data",
         prefix="TABLE   DE_DATACENTER(RRR,YYY)   'Datacenter electricity consumption (MWh)'\n",
         body=df_interp,
         suffix="\n;\nDE(YYY,RRR,'DATACENTER')=DE_DATACENTER(RRR,YYY);\nDE_DATACENTER(RRR,YYY)=0;",

@@ -48,7 +48,7 @@ You (the LLM) operate inside this repo. Read this file first, then follow it.
 ├── config/default.yaml         # Pipeline parameters
 ├── profiles/default/           # Snakemake profile
 ├── report/                     # LaTeX report (will be compiled to PDF with latexmk)
-├── scripts/                    # Python/R/etc. analysis scripts
+├── analysis/                   # Analysis scripts, notebooks, or supporting documents
 ├── tests/                      # Pytest tests of pipeline outputs
 ├── data/                       # Raw input data (gitkeep)
 ├── rules/                      # Additional Snakemake rules
@@ -64,7 +64,7 @@ You (the LLM) operate inside this repo. Read this file first, then follow it.
 
 ## Critical Conventions
 
-### Eager Skill Invocation
+**LLM agents in this repo are forbidden from running `git commit` under any circumstances.**
 
 The user prefers eager invocation — they don't want to type slash commands.
 
@@ -170,7 +170,7 @@ Or with vault aliases configured: `[[obs-notes/<note>]]` and `[[<repo-name>/<pag
 The repo ships with a working demo pipeline (linear-model fit + plot + latexmk
 report). To replace with real analyses:
 
-1. Edit `scripts/model.py` and `scripts/vis.py` (or add new scripts).
+1. Edit `analysis/model.py` and `analysis/vis.py` (or add new scripts).
 2. Add corresponding rules in `rules/*.smk` and include them in `Snakefile`.
 3. Update `config/default.yaml` with new parameters.
 4. Add tests to `tests/test_*.py` and reference them as fixtures in `tests/test_runner.py`.
@@ -186,15 +186,8 @@ It:
 
 - Appends events to `events.jsonl` based on the modified file's path
 - Updates `last_updated` in `research-state.yaml`
-- Queues files for the debounced auto-commit (`hooks/auto_commit.sh`)
 
-Auto-commit is **opt-in**: set `RESEARCH_TEMPLATE_AUTOCOMMIT=1` or `touch .autocommit.enabled` to enable. Without that marker, the hook tracks but does not commit.
-
-If hooks don't fire automatically (platform difference), invoke them explicitly:
-
-```bash
-echo '{"tool_input":{"file_path":"wiki/topics/foo.md"}}' | bash hooks/research_hook.sh
-```
+The hook tracks but does **not** commit. Commits are exclusively the user's responsibility — agents never call `git commit`.
 
 ### Principles
 

@@ -10,7 +10,7 @@
 #   - Substitutes placeholders in research-state.yaml and report/preamble.tex
 #   - Updates pixi.toml with project short name
 #   - Optionally configures vault_sync (path to primary Obsidian vault + project sub-path)
-#   - Optionally enables auto-commit (touches .autocommit.enabled)
+#   - Optionally configures vault-sync (path to primary Obsidian vault)
 #   - Initialises a fresh git repo if one isn't already present
 #   - Automatically runs `pixi install` to set up the project environment
 
@@ -78,14 +78,6 @@ PROJECT_PATH_IN_VAULT=""
 if confirm "Configure vault-sync from a primary Obsidian vault?"; then
     PRIMARY_VAULT=$(prompt "Primary vault absolute path" "$HOME/Documents/OneDrive/obs-notes")
     PROJECT_PATH_IN_VAULT=$(prompt "Project sub-path within the vault (e.g. '02 - Projects/MyProject')" "")
-fi
-echo ""
-
-# --- Auto-commit -----------------------------------------------------------
-
-WANT_AUTOCOMMIT="no"
-if confirm "Enable auto-commit? (debounced, 30s quiet period; touches .autocommit.enabled)"; then
-    WANT_AUTOCOMMIT="yes"
 fi
 echo ""
 
@@ -166,13 +158,7 @@ fi
 # to consume. The default LaTeX article class has no native \institute — add a
 # custom command in preamble.tex if you want it on the title page.
 
-# 4. Auto-commit marker
-if [ "$WANT_AUTOCOMMIT" = "yes" ] && [ "$CHECK_ONLY" -eq 0 ]; then
-    touch "$REPO_ROOT/.autocommit.enabled"
-    action "auto-commit enabled (.autocommit.enabled marker created)"
-fi
-
-# 5. Initialise git if not already
+# 4. Initialise git if not already
 if [ ! -d "$REPO_ROOT/.git" ] && [ "$CHECK_ONLY" -eq 0 ]; then
     if confirm "Initialise a fresh git repo here?"; then
         run_or_check git -C "$REPO_ROOT" init
@@ -182,7 +168,7 @@ if [ ! -d "$REPO_ROOT/.git" ] && [ "$CHECK_ONLY" -eq 0 ]; then
     fi
 fi
 
-# 6. Run vault-sync once if configured
+# 5. Run vault-sync once if configured
 if [ -n "$PRIMARY_VAULT" ] && [ -n "$PROJECT_PATH_IN_VAULT" ] && [ "$CHECK_ONLY" -eq 0 ]; then
     if confirm "Run an initial vault-sync now?"; then
         bash "$REPO_ROOT/hooks/vault_sync.sh" || warn "vault-sync exited with non-zero status"

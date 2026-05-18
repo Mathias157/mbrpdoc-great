@@ -69,13 +69,15 @@ boring. LLMs don't get bored.
 
 The hook is non-negotiable. It is the thing the human cannot outsource to
 discipline because the human is, in the end, the discipline that has been
-failing all along. Every Write/Edit fires `research_hook.sh`. Every commit-
-worthy change is queued for `auto_commit.sh`. Every wiki page that gets edited
-appends an event to `events.jsonl`. Every research evaluation persisted to
-`wiki/research-evaluations/` shows up in next week's digest.
+failing all along. Every Write/Edit fires `research_hook.sh`. Every wiki page
+that gets edited appends an event to `events.jsonl`. Every research evaluation
+persisted to `wiki/research-evaluations/` shows up in next week's digest.
 
 If the hook can't fire automatically (different platform, different runner),
 the LLM calls it explicitly. The semantics are identical.
+
+**Commits are the user's responsibility.** Agents never run `git commit`. The
+user stays in control of when and how changes enter the repository.
 
 ### Contract 3: Narrative first, reference second
 

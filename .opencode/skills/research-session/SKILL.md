@@ -153,11 +153,9 @@ When the user is done (says "done", "that's it", "wrap up", or moves to unrelate
 
 3. **Update `research-state.yaml`** with any changes from the session (new ingestions, etc.). The hook handles `last_updated` automatically; you update content fields as needed.
 
-4. **Belt-and-braces commit**: The repo has a debounced auto-commit hook that covers most incremental writes (30-second debounce, opt-in via `autocommit.enabled` marker). At session wrap:
-   - Run `git status --short` to inventory uncommitted / untracked files.
-   - Stage explicit paths (avoid `git add -A`). Cover at minimum: every file edited or created this session, `events.jsonl`, `research-state.yaml`, `wiki/log.md`, `wiki/index.md`.
-   - Commit with a short session-wrap message (e.g. `research: session wrap — <one-line summary>`).
-   - Push: `git push origin main` (skip if you don't have a remote configured).
+4. **Advise on manual commit** (if needed):
+   - Describe what files were changed this session (wiki pages, state, events).
+   - Remember: agents never commit. It's the user's responsibility.
 
 5. **Preview next session**: "For next time: you have [N] stale pages, and [suggestion]."
 

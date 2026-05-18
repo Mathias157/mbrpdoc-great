@@ -6,7 +6,7 @@ three repositories:
 1. **A working pipeline** — Snakemake DAG, Pixi environment management, LaTeX-compiled PDF report, pytest, GitHub Actions CI/CD that re-runs every push. Adapted from [`timtroendle/cookiecutter-reproducible-research`](https://github.com/timtroendle/cookiecutter-reproducible-research) with some inspiration 
 from [FedericoTartarini/reproducible-research](https://github.com/FedericoTartarini/reproducible-research).
 2. **A living wiki** — Obsidian-compatible knowledge base (`wiki/`) with topic, concept, group, synthesis, query, entity, and research-evaluation pages. Append-only event log + state file. Adapted from [`andrehuang/researcher-pack`](https://github.com/andrehuang/researcher-pack).
-3. **An LLM research loop** — `paper-read`, `lit-search`, `research-companion`, `weekly-review`, `orchestrate`, `vault-sync` skills with eager invocation. Three sub-agents (brainstormer, idea-critic, research-strategist) for divergence, critique, and strategy. Hook-based bookkeeping that auto-commits if you opt in.
+3. **An LLM research loop** — `paper-read`, `lit-search`, `research-companion`, `weekly-review`, `orchestrate`, `vault-sync` skills with eager invocation. Three sub-agents (brainstormer, idea-critic, research-strategist) for divergence, critique, and strategy. Hook-based bookkeeping for event tracking and state management.
 
 The result is one repo where the *thinking* (wiki + skills) and the *running*
 (Snakemake + tests) sit next to each other and don't drift.
@@ -17,7 +17,7 @@ The result is one repo where the *thinking* (wiki + skills) and the *running*
 git clone https://github.com/<you>/research-template.git my-project
 cd my-project
 rm -rf .git
-./setup.sh                 # interactive wizard: project name, vault sync, auto-commit
+./setup.sh                 # interactive wizard: project name, vault sync
 pixi run snakemake --cores 4   # build the demo report (pixi installs deps automatically)
 ```
 
@@ -33,11 +33,11 @@ should I work on?".
 │   ├── agent/                  # brainstormer, idea-critic, research-strategist
 │   └── skills/                 # 7 skills covering the full research loop
 ├── .github/workflows/          # reproduction.yaml + lint.yaml
-├── hooks/                      # research_hook.sh, auto_commit.sh, vault_sync.sh
+├── hooks/                      # research_hook.sh, vault_sync.sh
 ├── wiki/                       # Knowledge base (Obsidian vault)
 │   ├── meta/                   # Principles + architecture docs
 │   └── .vault-mirror/          # READ-ONLY mirror of primary Obsidian vault
-├── Snakefile + scripts/ + tests/ + report/
+├── Snakefile + analysis/ + tests/ + report/
 ├── pixi.toml + pixi.lock       # Environment + dependency lockfile
 ├── research-state.yaml         # State (read on session start)
 └── events.jsonl                # Append-only event log
@@ -64,8 +64,8 @@ should I work on?".
                                             topics/syntheses)
 
     weekly-review reads events.jsonl + state + git log
-    vault-sync mirrors primary vault → wiki/.vault-mirror/
-    research_hook.sh logs every write & queues auto-commit
+     vault-sync mirrors primary vault → wiki/.vault-mirror/
+     research_hook.sh logs every write
 ```
 
 ## Eager Invocation
@@ -109,20 +109,6 @@ Cross-vault Obsidian links work bidirectionally:
 
 - `[[obsidian://vault/obs-notes/02 - Projects/MyProject/Some Note]]` from project wiki
 - `[[obsidian://vault/MyProject/wiki/topics/some-topic]]` from primary vault
-
-## Auto-Commit
-
-Off by default. To enable:
-
-```bash
-touch .autocommit.enabled
-# or export RESEARCH_TEMPLATE_AUTOCOMMIT=1
-```
-
-The hook batches commit-worthy writes behind a 30-second debounce. Wiki
-updates, research-evaluation saves, and config edits get categorised commit
-messages (`wiki: update foo, bar`, `research: update baz`). It pushes if a
-remote named `origin` is configured; otherwise commits locally.
 
 ## Environment & Dependencies
 
@@ -233,7 +219,6 @@ Each layer is independently editable:
 - **Add a sub-agent** → drop a `.opencode/agent/<name>.md` with frontmatter (`description`, `mode: subagent`, `tools: ...`).
 - **Add a Snakemake rule** → write it in `rules/<name>.smk` and `include:` from `Snakefile`.
 - **Add a wiki page type** → extend `wiki/wiki.schema.md` and update the hook's dispatch in `hooks/research_hook.sh`.
-- **Tweak the auto-commit message format** → edit `do_commit()` in `hooks/auto_commit.sh`.
 
 Nothing is hidden behind framework abstractions. If you can read the file, you
 can fork it.

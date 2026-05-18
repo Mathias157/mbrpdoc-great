@@ -29,27 +29,27 @@ rule preprocessing:
         tyndp=rules.validate_tyndp2024.output,
         af25=rules.download_af25.output,
         script=[
-            "scripts/preprocessing/datacentres.py",
-            "scripts/preprocessing/grids.py"
+            "analysis/preprocessing/datacentres.py",
+            "analysis/preprocessing/grids.py"
         ]
     output:
-        "scripts/Balmorel/base/data/DE_DATACENTER.inc",
-        "scripts/Balmorel/base/data/XMAXINV.inc"
+        "analysis/Balmorel/base/data/DE_DATACENTER.inc",
+        "analysis/Balmorel/base/data/XMAXINV.inc"
     shell:
         """
-        python scripts/preprocessing/datacentres.py datacenterload
-        python scripts/preprocessing/grids.py
+        python analysis/preprocessing/datacentres.py datacenterload
+        python analysis/preprocessing/grids.py
         """
 
 rule run:
     message: "Runs the demo model."
     input:
-        "scripts/Balmorel/base/data/DE_DATACENTER.inc"
+        "analysis/Balmorel/base/data/DE_DATACENTER.inc"
     params:
         slope=config["slope"],
         x0=config["x0"],
     output: "build/results.pickle"
-    script: "scripts/model.py"
+    script: "analysis/model.py"
 
 
 rule plot:
@@ -61,11 +61,12 @@ rule plot:
         dark_colourmap=config["dark_colourmap"],
         white_colourmap=config["white_colourmap"]
     output: "build/plot.pdf"
-    script: "scripts/vis.py"
+    script: "analysis/vis.py"
 
 
 rule copy_figures:
     message: "Copy figures to report directory."
+    input: "build/test.success"
     params:
         wiki_path="wiki/sources/analyses/plots",
         build_path="build",
@@ -75,8 +76,8 @@ rule copy_figures:
     shell:
         """
         mkdir -p report/figures
-        cp {params.build_path}/plot.pdf {output.path}/
-        cp {params.wiki_path}/datacenter_electricity_consumption.pdf {output.path}/
+        cp {params.build_path}/plot.pdf {params.output_path}/
+        cp {params.wiki_path}/datacenter_electricity_consumption.pdf {params.output_path}/
         """
 
 

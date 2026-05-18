@@ -82,29 +82,26 @@ parked. These pages compose with the rest of the substrate in four ways:
 
 ## Layer 3 — Bookkeeping Daemon
 
-Three shell scripts in `hooks/`:
+Two shell scripts in `hooks/`:
 
 - **`research_hook.sh`** — registered as a file-edited hook in `opencode.json`.
-  Runs after every Write/Edit. Dispatches on the modified file's path: wiki
-  edits emit `wiki:update` events and update the state timestamp;
-  research-evaluation edits emit their own event; manuscript edits emit
-  `writing:edit`; experiment data emits `experiment:update`. It degrades
-  gracefully if hooks aren't auto-fired (the LLM can call it explicitly).
-
-- **`auto_commit.sh`** — called by `research_hook.sh` for commit-worthy
-  changes. Uses a pending-file debounce pattern: each call timestamps the
-  change; a background process waits for a 30-second quiet period before
-  committing everything at once. Categorises commit messages (`wiki: update
-  X`, `research: update Y`). Opt-in via `RESEARCH_TEMPLATE_AUTOCOMMIT=1` or a
-  `.autocommit.enabled` marker file.
+   Runs after every Write/Edit. Dispatches on the modified file's path: wiki
+   edits emit `wiki:update` events and update the state timestamp;
+   research-evaluation edits emit their own event; manuscript edits emit
+   `writing:edit`; experiment data emits `experiment:update`. It degrades
+   gracefully if hooks aren't auto-fired (the LLM can call it explicitly).
+   
+   **Important:** This hook does NOT commit. Commits are exclusively the
+   user's responsibility — agents in this repo are forbidden from running
+   `git commit`.
 
 - **`vault_sync.sh`** — one-way `rsync` from the user's primary Obsidian vault
-  into `wiki/.vault-mirror/`. Reads configuration from `research-state.yaml` →
-  `vault_sync:`. Updates the state file's `last_sync_at` timestamp and emits a
-  `vault:sync` event. Excludes `.obsidian/`, `.trash/`, `Attachments/`, and
-  `*.canvas` by default.
+   into `wiki/.vault-mirror/`. Reads configuration from `research-state.yaml` →
+   `vault_sync:`. Updates the state file's `last_sync_at` timestamp and emits a
+   `vault:sync` event. Excludes `.obsidian/`, `.trash/`, `Attachments/`, and
+   `*.canvas` by default.
 
-These three scripts close the loop without the human having to remember. The
+These two scripts close the loop without the human having to remember state changes. The
 alternative — "maintain a tidy knowledge base by sheer discipline" — is
 exactly the thing humans fail at.
 
@@ -126,14 +123,12 @@ Here's what happens when the user shares a paper PDF:
    `wiki/index.md`. Each edit triggers `research_hook.sh`, which appends a
    `wiki:update` event to `events.jsonl` and bumps `last_updated` in
    `research-state.yaml`.
-8. After a 30s quiet period, `auto_commit.sh` (if enabled) bundles all the
-   changes into one commit and pushes if a remote is configured.
-9. Phase 5: Suggest a follow-up — `research-companion` to brainstorm
+8. Phase 5: Suggest a follow-up — `research-companion` to brainstorm
    implications, `lit-search` to map the surrounding subfield, or another
    paper-read to deepen.
 
 At no point did the user write a commit message, update an index by hand, or
-maintain cross-references. That's all in Layer 3.
+maintain cross-references. Bookkeeping is automated; commits are the user's responsibility.
 
 One other flow worth calling out: `lit-search` is the "many papers at once"
 counterpart to `paper-read`. It owns a per-topic workspace under

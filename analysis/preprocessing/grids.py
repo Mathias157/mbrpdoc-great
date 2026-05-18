@@ -21,9 +21,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import pandas as pd
 import numpy as np
 from pybalmorel import IncFile
-from scripts.utils.plotting import setup_plot
-from scripts.utils.formats import tynd_to_balmorel
-from scripts.utils import load_excel_sheet
+from analysis.utils.plotting import setup_plot
+from analysis.utils.formats import tynd_to_balmorel
+from analysis.utils import load_excel_sheet
 
 
 # ------------------------------- #
@@ -114,7 +114,7 @@ def main():
         name="XMAXINV",
         prefix="TABLE XMAXINV(IRRRE,IRRRI)   'Max investment in transmission capacity between two regions for each simulated year(each 5th year)'\n",
         suffix="\n;",
-        path="scripts/Balmorel/base/data",
+        path="analysis/Balmorel/base/data",
     )
     incfile.body = df
     incfile.body_prepare("From", "To")

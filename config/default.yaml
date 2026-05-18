@@ -7,7 +7,6 @@ white_colourmap: managua
 dark_colourmap: hawaii_r
 dark_plots: false
 
-
 # Archive rule (`snakemake archive`) settings.
 push:
     from: build

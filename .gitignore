@@ -45,10 +45,6 @@ __pycache__
 .snakemake/
 dag.pdf
 
-# Researcher Pack runtime state
-.commit-pending
-.commit-lock
-autocommit.enabled
 
 # OS
 .DS_Store

@@ -3,14 +3,14 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from plotting import setup_plot
+from formats import setup_plot
 
 
 def visualise_model_results(path_to_results, path_to_figure, dark=False):
     """Plot the results."""
     sns.set_context("paper")
-    facecolor = setup_plot(dark=dark)
     results = pd.read_pickle(path_to_results)
+    facecolor = setup_plot(dark=dark)
     fig = plt.figure(figsize=(8, 4))
     ax = fig.add_subplot(111)
     ax.plot(results)

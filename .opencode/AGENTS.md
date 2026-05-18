@@ -8,6 +8,10 @@ tell the LLM **when to eagerly invoke** the research skills bundled in
 The user prefers **eager invocation**: skills are not slash commands they have to
 remember. The LLM should detect intent and read the relevant SKILL.md.
 
+## Agents NEVER Commit
+
+**LLM agents in this repo are forbidden from running `git commit` under any circumstances.**
+
 ## Skill Activation Triggers (eager invocation)
 
 When the user's message matches any of the patterns below, IMMEDIATELY READ the
@@ -71,8 +75,7 @@ JSON, e.g.:
 echo '{"tool_input":{"file_path":"wiki/topics/foo.md"}}' | bash hooks/research_hook.sh
 ```
 
-The auto-commit step is opt-in via `RESEARCH_TEMPLATE_AUTOCOMMIT=1` or by
-creating a `.autocommit.enabled` marker file at repo root.
+The hook tracks but does **not** commit. Commits are exclusively the user's responsibility.
 
 ## State Awareness
 
