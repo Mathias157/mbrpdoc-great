@@ -19,6 +19,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import pandas as pd
+import numpy as np
+from pybalmorel import IncFile
 from scripts.utils.plotting import setup_plot
 from scripts.utils.formats import tynd_to_balmorel
 from scripts.utils import load_excel_sheet
@@ -56,7 +58,7 @@ def main():
     sum_before = df.Value.sum()
 
     # Convert TYNDP region codes to BALMOREL codes
-    # First: Append new rows when Balmorel has more regions
+    # Append new rows when Balmorel has more regions
     length = df.shape[0]
     for row in range(length):
         from_region = tynd_to_balmorel[df.From[row]]
@@ -66,7 +68,7 @@ def main():
         if type(to_region) is list:
             add_new_rows(df, to_region, row, "To")
 
-    # Second: Convert names
+    # Convert names
     length = df.shape[0]
     for row in range(length):
         try:
@@ -87,6 +89,36 @@ def main():
     assert sum_before == df.Value.sum(), (
         "Data cleaning went wrong! Sum of capacities not the same as on input side"
     )
+
+    # FIX: When Balmorel has more regions, only the correct connection should have max cap (but maybe this is already handled by XINVCOST filtering?)
+
+    # Remove regions not in Balmorel or with zero
+    drop_rows = []
+    for row in range(length):
+        try:
+            from_region = tynd_to_balmorel[df.From[row]]
+            if from_region is None or df.Value[row] == 0:
+                drop_rows.append(row)
+        except KeyError:
+            pass
+        try:
+            to_region = tynd_to_balmorel[df.To[row]]
+            if to_region is None or df.Value[row] == 0:
+                drop_rows.append(row)
+        except KeyError:
+            pass
+    df = df.drop(index=np.unique(drop_rows))
+
+    # Create .inc file
+    incfile = IncFile(
+        name="XMAXINV",
+        prefix="TABLE XMAXINV(IRRRE,IRRRI)   'Max investment in transmission capacity between two regions for each simulated year(each 5th year)'\n",
+        suffix="\n;",
+        path="scripts/Balmorel/base/data",
+    )
+    incfile.body = df
+    incfile.body_prepare("From", "To")
+    incfile.save()
 
 
 if __name__ == "__main__":

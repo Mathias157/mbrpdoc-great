@@ -28,11 +28,18 @@ rule preprocessing:
     input:
         tyndp=rules.validate_tyndp2024.output,
         af25=rules.download_af25.output,
-        script="scripts/preprocessing/datacentres.py"
+        script=[
+            "scripts/preprocessing/datacentres.py",
+            "scripts/preprocessing/grids.py"
+        ]
     output:
-        "scripts/Balmorel/base/data/DE_DATACENTER.inc"
+        "scripts/Balmorel/base/data/DE_DATACENTER.inc",
+        "scripts/Balmorel/base/data/XMAXINV.inc"
     shell:
-        "python scripts/preprocessing/datacentres.py datacenterload"
+        """
+        python scripts/preprocessing/datacentres.py datacenterload
+        python scripts/preprocessing/grids.py
+        """
 
 rule run:
     message: "Runs the demo model."
