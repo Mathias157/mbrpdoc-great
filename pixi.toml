@@ -1,5 +1,5 @@
 [workspace]
-name = "research-template"
+name = "mbrpdoc-great"
 version = "0.1.0"
 description = "A reproducible research template combining Snakemake pipeline, Obsidian wiki, and OpenCode LLM loop"
 authors = ["Claude Opus 4.7 <claude@anthropic.com>"]
