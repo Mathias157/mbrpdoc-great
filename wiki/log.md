@@ -4,6 +4,18 @@ Append-only chronological record of wiki operations. Most recent entries at the 
 
 ---
 
+## 2026-05-18
+
+**Query Update: GREAT Scenario Data Sources — Isolationism Finding**  
+Updated `wiki/queries/great-scenario-data-sources.md` dimension #4:
+- Documented empirical comparison: Balmorel investment optimisation vs. TYNDP2024 reference grid + candidates to 2039
+- Finding: Balmorel investments exceed TYNDP candidates by ~100% (example: 5 GW Belgium–UK line in 2040 vs. TYNDP 2.4 GW)
+- Marked isolationism dimension as empirically grounded; updated assumptions log with TYNDP2024 as authoritative boundary condition for "reference-only" scenario
+
+**Implication**: Isolationism dimension operationalisation uses reference grid as constraint floor; baseline absorbs higher Balmorel-optimal investments
+
+---
+
 ## 2026-05-13
 
 **Lit-Search Workspace: Datacentre Flexibility**  

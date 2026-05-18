@@ -99,7 +99,10 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ### 4. Isolationism / Transmission Constraints
 
-**Current Status**: ✅ Source identified  
+**Current Status**: ✅ Source identified; empirical comparison complete
+
+**Finding**: Comparison of TYNDP2024 reference grid + investment candidates up to 2039 to Balmorel investment optimisation scenario shows Balmorel investments surpass TYNDP ref. + candidates. Example: 5 GW line Belgium–UK in 2040, vs. TYNDP reference + candidates 2.4 GW.
+
 **URLs**: 
 - [TYNDP2024 Reference Grid & Investment Candidates](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/20231103-Electricity-and-Hydrogen-Reference-Grid-Investment-Candidates.xlsx.zip)
 - [TYNDP2024 Line Data](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/Line-data.zip)
@@ -107,7 +110,8 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 **Data Included**: Reference grid topology, transmission investment candidates, line-level data
 
 **Action Items**:
-- [ ] Download both TYNDP2024 files → `data/tyndp-2024/`
+- [x] Download both TYNDP2024 files → `data/tyndp-2024/`
+- [x] Compare TYNDP transmission candidates to Balmorel optimal investment
 - [ ] Extract transmission capacity data (reference grid scenario)
 - [ ] Define "isolationism": use reference grid only; no investment candidates enabled
 - [ ] Calculate transmission limits for grid model
@@ -119,7 +123,7 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 - Baseline scenario = reference grid + selected investment candidates
 - Document choice and reasoning
 
-**Notes**: TYNDP is authoritative source; this dimension is well-supported.
+**Notes**: TYNDP is authoritative source for isolationism boundary conditions; Balmorel produces higher investment levels in unrestricted optimisation.
 
 ---
 
@@ -251,7 +255,7 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 | EV Electrification | TBD | Pending consensus.app review | Pending | ⏳ |
 | V2G Adoption | TBD | Needs definition | Vault notes | ⏳ |
 | Heat-Pump Penetration | 40% residential by 2050 (vs. baseline 70%) | Retrofit cost barriers | Assumption | ⏳ |
-| Isolationism | 50% reduction in transmission investment | Reference grid only | TYNDP2024 | ⏳ |
+| Isolationism | Reference grid only; Balmorel optimisation exceeds TYNDP candidates by ~100% (e.g., 5 GW vs. 2.4 GW Belgium–UK) | TYNDP bounds restraint vs. cost-optimal | TYNDP2024 empirical | ✅ |
 | Industry Electrification | 30% reduction in industrial PtX | Continued fossil + CCS | Assumption | ⏳ |
 | Hydrogen Demand | 30% reduction vs. baseline | Slower H₂ adoption | IEA (TBD) | ⏳ |
 | Electrolyser Flexibility | Constant transport profile | High capacity factor targets | Assumption | ⏳ |
