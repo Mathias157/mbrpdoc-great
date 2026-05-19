@@ -39,6 +39,7 @@ rule preprocessing:
         """
         python analysis/preprocessing/datacentres.py datacenterload
         python analysis/preprocessing/grids.py electricity-transmission
+        python analysis/preprocessing/grids.py hydrogen-transmission
         """
 
 rule run:
