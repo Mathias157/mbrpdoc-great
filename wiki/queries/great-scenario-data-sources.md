@@ -21,7 +21,7 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 | 1. EV Electrification | Current assumptions | Pessimistic 2050 EV fleet scenario | Quantified fleet growth rate / stock data |
 | 2. V2G Adoption | Smart bidirectional charging | Dumb uni-directional charging | Exogenous V2G capacity profile |
 | 3. Heat-Pump Penetration | Current assumptions | Reduced residential HP adoption | HP penetration % by region; LCA/cost barriers data |
-| 4. Isolationism | TYNDP2024 reference grid | Reduced transmission investment | TYNDP transmission constraints; investment caps |
+| 4. Isolationism (Electricity + Hydrogen) | Unconstrained (elec. + H₂) | Constrained: ref. grid + candidates ≤2040 (elec.); "low infrastructure" for H₂ (ref. + 2030) | TYNDP transmission caps; baseline/pessimistic split |
 | 5. Industry Electrification | Current assumptions | Reduced PtX in industry | Industry electrification scenarios; PtX adoption % |
 | 6. Hydrogen Demand | Baseline H₂ demand | IEA pessimistic H₂ scenario | IEA projections; Kountouris baseline assumptions |
 | 7. Electrolyser Flexibility | Flexible operation + storage | Fixed transport H₂ profile | Assumed constant H₂ transport demand profile |
@@ -97,9 +97,9 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ---
 
-### 4. Isolationism / Transmission Constraints
+### 4. Isolationism / Electricity Transmission Constraints
 
-**Current Status**: ✅ Source identified; empirical comparison complete
+**Current Status**: ✅ Baseline rule created; hydrogen rule in progress
 
 **Finding**: Comparison of TYNDP2024 reference grid + investment candidates up to 2039 to Balmorel investment optimisation scenario shows Balmorel investments surpass TYNDP ref. + candidates. Example: 5 GW line Belgium–UK in 2040, vs. TYNDP reference + candidates 2.4 GW.
 
@@ -107,21 +107,24 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 - [TYNDP2024 Reference Grid & Investment Candidates](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/20231103-Electricity-and-Hydrogen-Reference-Grid-Investment-Candidates.xlsx.zip)
 - [TYNDP2024 Line Data](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/Line-data.zip)
 
-**Data Included**: Reference grid topology, transmission investment candidates, line-level data
+**Data Included**: Reference grid topology, transmission investment candidates (both electricity & hydrogen), line-level data
+
+**Decision**:
+- **Electricity baseline (isolationism=False)**: Unconstrained (no TYNDP limits; Balmorel optimizes freely)
+- **Electricity pessimistic (isolationism=True)**: TYNDP2024 reference grid + investment candidates before 2040
+- **Hydrogen baseline (H₂ expansion=True)**: Unconstrained (no TYNDP limits)
+- **Hydrogen pessimistic (H₂ expansion=False)**: TYNDP2024 "low infrastructure" scenario (reference grid + 2030 candidates only, no 2040 expansion)
 
 **Action Items**:
-- [x] Download both TYNDP2024 files → `data/tyndp-2024/`
-- [x] Compare TYNDP transmission candidates to Balmorel optimal investment
-- [ ] Extract transmission capacity data (reference grid scenario)
-- [ ] Define "isolationism": use reference grid only; no investment candidates enabled
-- [ ] Calculate transmission limits for grid model
+- [x] Download TYNDP2024 files → `data/tyndp-2024/`
+- [x] Create `analysis/preprocessing/grids.py::electricity_transmission()` — generates XMAXINV.inc for electricity
+- [ ] Create `analysis/preprocessing/grids.py::hydrogen_transmission()` — generates hydrogen constraints from TYNDP "low infrastructure" scenario
 - [ ] Cross-check with Theo's prior analysis (vault-mirror notes mention transmission sensitivity)
 - [ ] Verify against GREAT current assumptions for baseline transmission
 
-**Assumptions if Data Unclear**:
-- Isolationism scenario = reference grid only; investment candidates (AC/DC lines) disabled
-- Baseline scenario = reference grid + selected investment candidates
-- Document choice and reasoning
+**Implementation Notes**: 
+- `grids.py::electricity_transmission()` produces `XMAXINV.inc` constraining transmission to TYNDP ref. + candidates before 2040.
+- Next: `grids.py::hydrogen_transmission()` will extract hydrogen network constraints from TYNDP "low infrastructure" scenario (2030 candidates only; reference grid + no 2040 expansion for H₂).
 
 **Notes**: TYNDP is authoritative source for isolationism boundary conditions; Balmorel produces higher investment levels in unrestricted optimisation.
 
@@ -255,7 +258,8 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 | EV Electrification | TBD | Pending consensus.app review | Pending | ⏳ |
 | V2G Adoption | TBD | Needs definition | Vault notes | ⏳ |
 | Heat-Pump Penetration | 40% residential by 2050 (vs. baseline 70%) | Retrofit cost barriers | Assumption | ⏳ |
-| Isolationism | Reference grid only; Balmorel optimisation exceeds TYNDP candidates by ~100% (e.g., 5 GW vs. 2.4 GW Belgium–UK) | TYNDP bounds restraint vs. cost-optimal | TYNDP2024 empirical | ✅ |
+| Isolationism (Electricity) | Pessimistic: ref. grid + candidates ≤2040; Baseline: unconstrained | TYNDP2024 bounds restraint vs. cost-optimal unconstrained | TYNDP2024 empirical | ✅ |
+| Hydrogen Expansion | Pessimistic: "low infrastructure" (ref. grid + 2030 only); Baseline: unconstrained | TYNDP scenarios differentiate H₂ ambition vs. unconstrained | TYNDP2024 low/high infrastructure | ✅ |
 | Industry Electrification | 30% reduction in industrial PtX | Continued fossil + CCS | Assumption | ⏳ |
 | Hydrogen Demand | 30% reduction vs. baseline | Slower H₂ adoption | IEA (TBD) | ⏳ |
 | Electrolyser Flexibility | Constant transport profile | High capacity factor targets | Assumption | ⏳ |

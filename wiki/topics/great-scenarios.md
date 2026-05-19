@@ -52,7 +52,7 @@ GREAT operationalizes these narratives through 9 binary dimensions, each represe
 | EV Electrification | High adoption (e.g., 80%+ by 2050) | Pessimistic (e.g., 60% by 2050) | DE: high adoption; GA: moderate adoption |
 | V2G Adoption | Smart 2-way charging | Dumb uni-directional only | DE: V2G enabled; GA: variable |
 | Heat-Pump Penetration | 70% residential by 2050 | 40% (retrofit cost / social barriers) | DE: high HP; GA: mixed (CCS alternative) |
-| Isolationism | Reference grid + investment candidates | Reference grid only (no transmission expansion) | DE: reduced transmission; GA: high transmission |
+| Isolationism | Unconstrained (elec. + hydrogen) | Constrained: TYNDP ref. grid + candidates ≤2040 (elec.); hydrogen "low infrastructure" (ref. + 2030 only) | DE: reduced transmission; GA: high transmission |
 | Industry Electrification | High PtX penetration | Reduced (continued fossil + CCS) | DE: high electrification; GA: mixed (CCS + trade) |
 | Hydrogen Demand | Baseline (e.g., 200 PJ/yr) | Pessimistic 30% reduction | GA: high H₂; DE: lower H₂ (more local electrification) |
 | Electrolyser Flexibility | Flexible scheduling + storage | Fixed transport profile (high capacity factor) | GA: flexible; DE: constrained |
