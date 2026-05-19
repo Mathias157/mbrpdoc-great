@@ -134,7 +134,7 @@ tynd_to_balmorel = {
     "HU00": "HU",
     "ITCS": "IT",
     "ITCO": "IT",
-    "IL00": "IL",
+    "IL00": None,
     "LT00": "LT",
     "LV00": "LV",
     "SE02": "SE2",
