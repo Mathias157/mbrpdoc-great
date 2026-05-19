@@ -121,7 +121,7 @@ def datacenterload(ctx, scenario):
     ax.set_xlim([2025, 2050])
     ax.set_ylabel("Datacenter Electricity Consumption [TWh]")
     fig.savefig(
-        "wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf",
+        "analysis/plots/datacenter_electricity_consumption.pdf",
         bbox_inches="tight",
         transparent=True,
     )

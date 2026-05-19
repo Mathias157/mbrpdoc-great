@@ -38,7 +38,7 @@ rule preprocessing:
     shell:
         """
         python analysis/preprocessing/datacentres.py datacenterload
-        python analysis/preprocessing/grids.py
+        python analysis/preprocessing/grids.py electricity-transmission
         """
 
 rule run:
@@ -68,16 +68,15 @@ rule copy_figures:
     message: "Copy figures to report directory."
     input: "build/test.success"
     params:
-        wiki_path="wiki/sources/analyses/plots",
+        plot_path="analysis/plots",
         build_path="build",
         output_path="report/figures",
     output:
         glob("report/figures/*.pdf")
     shell:
         """
-        mkdir -p report/figures
         cp {params.build_path}/plot.pdf {params.output_path}/
-        cp {params.wiki_path}/datacenter_electricity_consumption.pdf {params.output_path}/
+        cp {params.plot_path}/datacenter_electricity_consumption.pdf {params.output_path}/
         """
 
 

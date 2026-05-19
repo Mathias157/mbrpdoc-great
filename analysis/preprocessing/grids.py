@@ -15,6 +15,7 @@ Created on 18.05.2026
 import sys
 import os
 from pathlib import Path
+import click
 
 # Add repo root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -68,11 +69,18 @@ def add_new_rows(
 # ------------------------------- #
 
 
+@click.group()
 def main():
+
+    pass
+
+
+@main.command()
+def electricity_transmission():
 
     # Load sheets and Balmorel input data
     df = load_excel_sheet(
-        "wiki/sources/analyses/20231103-TYNDP2024-GRID.xlsx",
+        "analysis/preprocessing/20231103-TYNDP2024-GRID.xlsx",
         "BALMOREL_XTRANS_POT",
         0,
     )
@@ -153,7 +161,7 @@ def main():
     # Final, manual adjustments
     df = df.pivot_table(index="From", columns="To", values="Value", aggfunc="sum")
 
-    # Multiple links should be halfed
+    # Double links should be halfed
     df.loc["CZ", "DE4-E"] = df.loc["CZ", "DE4-E"] / 2
     df.loc["CZ", "DE4-S"] = df.loc["CZ", "DE4-S"] / 2
     df.loc["DE4-E", "CZ"] = df.loc["DE4-E", "CZ"] / 2
@@ -188,6 +196,7 @@ def main():
         suffix="\n$label unconstrained\n;",
         path="analysis/Balmorel/base/data",
     )
+    df = df.astype(object)
     idx = df < 1e-5
     df[idx] = ""
     incfile.body = df.fillna("")
