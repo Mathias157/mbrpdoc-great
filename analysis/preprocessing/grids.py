@@ -324,7 +324,7 @@ def hydrogen_transmission():
 
     # Create .inc file
     incfile = IncFile(
-        name="XH2MAXINV",
+        name="HYDROGEN_XH2MAXINV",
         prefix="TABLE XH2MAXINV(IRRRE,IRRRI)   'Max investment in hydrogen transmission capacity between two regions for each simulated year(each 5th year)'\n$ifi not %tyndp2039%==yes  $goto unconstrained\n",
         suffix="\n$label unconstrained\n;",
         path="analysis/Balmorel/base/data",
