@@ -4,9 +4,21 @@ Append-only chronological record of wiki operations. Most recent entries at the 
 
 ---
 
+## 2026-05-20
+
+**Debugging: Max Electricity Transmission Infeasibility**
+- **Root cause**: `XKFX` (exogenous transmission capacity) was populated with the **sum of TYNDP2024 reference grid + all candidates**, inflating existing capacity and leaving no room for endogenous investment (`VXKNACCUMNET.UP = XMAXINV - XKFX` became negative).
+- **Fix**: Rebuilt `XKFX` using **TYNDP2024 reference grid only** (lines 514–798 in `debugging-max-electricity-transmission.md`), ensuring asymmetrical capacities (e.g., `DE4-S,AT,800` and `AT,DE4-S,7500`).
+- **File**: Replaced the original `XKFX.inc`.
+- **Impact**: Resolves infeasibility in `VXKNACCUMNET` for all corridors listed in the wiki (e.g., `DE4-S,AT`, `NL,DE4-W`, `NO1,NO3`).
+
+Updated `wiki/topics/debugging-max-electricity-transmission.md` with findings and fix.
+
+---
+
 ## 2026-05-18
 
-**Query Update: GREAT Scenario Data Sources — Isolationism Finding**  
+**Query Update: GREAT Scenario Data Sources — Isolationism Finding**
 Updated `wiki/queries/great-scenario-data-sources.md` dimension #4:
 - Documented empirical comparison: Balmorel investment optimisation vs. TYNDP2024 reference grid + candidates to 2039
 - Finding: Balmorel investments exceed TYNDP candidates by ~100% (example: 5 GW Belgium–UK line in 2040 vs. TYNDP 2.4 GW)

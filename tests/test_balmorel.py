@@ -44,22 +44,14 @@ def test_transmaxinv(balmorel_already_run: bool = False):
             name="T",
             path=str(data_path),
             prefix="SET T(TTT)  'Time periods within a season in the simulation'",
-            body="""
-/
-T010
-/;
-""",
+            body="""\n/\nT010\n/;""",
         ).save()
 
         IncFile(
             name="S",
             path=str(data_path),
             prefix="SET S(SSS)  'Seasons in the simulation'",
-            body="""
-/
-S26
-/;
-""",
+            body="""\n/\nS26\n/;""",
         ).save()
 
         # Run tests
@@ -68,11 +60,30 @@ S26
 
     # Load results and plot maps
     model.collect_results(suffix_naming_only=True)
-    fig, _ = model.results.plot_map("unconstrained", 2050, "Electricity")
+
+    assert (
+        "unconstrained" in model.scfolder_to_scname["tests"]
+        and "constrained" in model.scfolder_to_scname["tests"]
+    ), (
+        "Couldn't find MainResults_unconstrained.gdx and MainResults_constrained.gdx in tests/model! Run this on HPC with balmorel_already_run = False to produce them"
+    )
+
+    fig, _ = model.results.plot_map(
+        "unconstrained", 2050, "Electricity", lines="Capacity", exo_end="Exogenous"
+    )
+    fig.savefig("analysis/plots/tests/trans_exogenous_el.pdf")
+    fig, _ = model.results.plot_map(
+        "unconstrained",
+        2050,
+        "Electricity",
+        lines="Capacity",
+    )
     fig.savefig("analysis/plots/tests/trans_unconstrained_el.pdf")
-    fig, _ = model.results.plot_map("unconstrained", 2050, "Hydrogen")
+    fig, _ = model.results.plot_map("unconstrained", 2050, "Hydrogen", lines="Capacity")
     fig.savefig("analysis/plots/tests/trans_unconstrained_h2.pdf")
-    fig, _ = model.results.plot_map("constrained", 2050, "Electricity")
+    fig, _ = model.results.plot_map(
+        "constrained", 2050, "Electricity", lines="Capacity"
+    )
     fig.savefig("analysis/plots/tests/trans_constrained_el.pdf")
-    fig, _ = model.results.plot_map("constrained", 2050, "Hydrogen")
+    fig, _ = model.results.plot_map("constrained", 2050, "Hydrogen", lines="Capacity")
     fig.savefig("analysis/plots/tests/trans_constrained_h2.pdf")

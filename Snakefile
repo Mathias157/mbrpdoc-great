@@ -20,7 +20,7 @@ min_version("8.0")
 rule all:
     message: "Run entire analysis and compile LaTeX report."
     input:
-        "build/report.pdf",
+        "build/main.pdf",
         "build/test.success",
 
 rule preprocessing:
@@ -34,7 +34,7 @@ rule preprocessing:
         ]
     output:
         "analysis/Balmorel/base/data/DE_DATACENTER.inc",
-        "analysis/Balmorel/base/data/XMAXINV.inc"
+        "analysis/Balmorel/base/data/XMAXINV.inc",
         "analysis/Balmorel/base/data/HYDROGEN_XH2MAXINV.inc"
     shell:
         """
@@ -89,12 +89,11 @@ rule latex_report:
         preamble="report/preamble.tex",
         bib="report/bibliography.bib",
         figures=rules.copy_figures.output,
-    output: "build/report.pdf"
+    output: "build/main.pdf"
     shell:
         """
         cd report
         latexmk -pdf main.tex
-        mv ../build/main.pdf ../build/report.pdf
         """
 
 
