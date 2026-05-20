@@ -175,7 +175,7 @@ tynd_to_balmorel = {
     "LY00": None,
     "MT00": "MT",
     "TR00": "TR",
-    "UKNI": "UK",
+    "UKNI": "IE",
     "PS00": None,
     "RS00": "RS",
     "SK00": "SK",

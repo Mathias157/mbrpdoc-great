@@ -155,10 +155,12 @@ I changed XKFX, so it is no longer the previous assumptions below.
 However, i used the NO2-NO1, NO2-NO5 and internal German XKFX values from below,
 as these are not documented by TYNDP2024.
 
-2050,NO1,NO2,2200
-2050,NO2,NO1,3500
-2050,NO2,NO5,500
-2050,NO5,NO2,600
+2016,NO1,NO2,2200
+2016,NO2,NO1,3500
+2016,NO2,NO5,500
+2016,NO5,NO2,600
+2016,NO1,NO5,300
+2016,NO5,NO1,3900
 
            DE4-N DE4-W DE4-E DE4-S
 DE4-N            8634  3010        

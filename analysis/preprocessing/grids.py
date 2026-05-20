@@ -38,6 +38,13 @@ def load_possible_connections():
     electricity_possible_connections = m.get_input("XINVCOST").pivot_table(
         index="IRRRE", columns="IRRRI", aggfunc="count", values="Value", fill_value=0
     )
+
+    # Manual corrections for IE-FR and NO2-NL
+    electricity_possible_connections.loc["IE", "FR"] = 1
+    electricity_possible_connections.loc["FR", "IE"] = 1
+    electricity_possible_connections.loc["NO2", "NL"] = 1
+    electricity_possible_connections.loc["NL", "NO2"] = 1
+
     hydrogen_possible_connections = m.get_input("XH2INVCOST").pivot_table(
         index="IRRRE", columns="IRRRI", aggfunc="count", values="Value", fill_value=0
     )
@@ -172,7 +179,7 @@ def electricity_transmission():
     ]
     suffixes = [
         "\n$label unconstrained\n;\n* Ensure symmetry\nXMAXINV(IRRRE,IRRRI)=MAX(XMAXINV(IRRRI,IRRRE),XMAXINV(IRRRE,IRRRI));",
-        "\n;\nXKFX('2024',IRRRE,IRRRI)=XKFX1(IRRRE,IRRRI);\nXKFX1(IRRRE,IRRRI)=0;\nXKFX('2024','DE4-N','DE4-W')=8634;\nXKFX('2024','DE4-N','DE4-E')=3010;\nXKFX('2024','DE4-W','DE4-N')=8634;\nXKFX('2024','DE4-W','DE4-E')=6020;\nXKFX('2024','DE4-W','DE4-S')=14416;\nXKFX('2024','DE4-E','DE4-N')=3010;\nXKFX('2024','DE4-E','DE4-W')=6020;\nXKFX('2024','DE4-E','DE4-S')=3010;\nXKFX('2024','DE4-S','DE4-W')=14416;\nXKFX('2024','DE4-S','DE4-E')=3010;\nXKFX('2024','NO2','NO1')=3500;\nXKFX('2024','NO1','NO2')=2200;\nXKFX('2024','NO5','NO2')=600;\nXKFX('2024','NO2','NO5')=500;\nXKFX(Y,IRRRE,IRRRI)=XKFX('2024',IRRRE,IRRRI);",
+        "\n;\nXKFX('2024',IRRRE,IRRRI)=XKFX1(IRRRE,IRRRI);\nXKFX1(IRRRE,IRRRI)=0;\nXKFX('2024','DE4-N','DE4-W')=8634;\nXKFX('2024','DE4-N','DE4-E')=3010;\nXKFX('2024','DE4-W','DE4-N')=8634;\nXKFX('2024','DE4-W','DE4-E')=6020;\nXKFX('2024','DE4-W','DE4-S')=14416;\nXKFX('2024','DE4-E','DE4-N')=3010;\nXKFX('2024','DE4-E','DE4-W')=6020;\nXKFX('2024','DE4-E','DE4-S')=3010;\nXKFX('2024','DE4-S','DE4-W')=14416;\nXKFX('2024','DE4-S','DE4-E')=3010;\nXKFX('2024','NO2','NO1')=3500;\nXKFX('2024','NO1','NO2')=2200;\nXKFX('2024','NO5','NO2')=600;\nXKFX('2024','NO2','NO5')=500;\nXKFX('2024','NO1','NO5')=300;\nXKFX('2024','NO5','NO1')=3900;\nXKFX(Y,IRRRE,IRRRI)=XKFX('2024',IRRRE,IRRRI);",
     ]
 
     names = ["XMAXINV", "XKFX"]
