@@ -35,12 +35,14 @@ rule preprocessing:
     output:
         "analysis/Balmorel/base/data/DE_DATACENTER.inc",
         "analysis/Balmorel/base/data/XMAXINV.inc",
+        "analysis/Balmorel/base/data/XKFX.inc",
         "analysis/Balmorel/base/data/HYDROGEN_XH2MAXINV.inc"
     shell:
         """
         python analysis/preprocessing/datacentres.py datacenterload
         python analysis/preprocessing/grids.py electricity-transmission
         python analysis/preprocessing/grids.py hydrogen-transmission
+        python analysis/preprocessing/evs.py
         """
 
 rule run:
