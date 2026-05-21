@@ -74,7 +74,8 @@ rule copy_figures:
         build_path="build",
         output_path="report/figures",
     output:
-        glob("report/figures/*.pdf")
+        "report/figures/plot.pdf",
+        "report/figures/datacenter_electricity_consumption.pdf",
     shell:
         """
         cp {params.build_path}/plot.pdf {params.output_path}/
