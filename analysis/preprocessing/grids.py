@@ -178,7 +178,7 @@ def electricity_transmission():
         "TABLE XKFX1(IRRRE,IRRRI)  'Initial transmission capacity between regions'\n",
     ]
     suffixes = [
-        "\n$label unconstrained\n;\n* Ensure symmetry\nXMAXINV(IRRRE,IRRRI)=MAX(XMAXINV(IRRRI,IRRRE),XMAXINV(IRRRE,IRRRI));\n$ifi %tyndp2039%==yes XMAXINV(IRRRE,IRRRI)$(XMAXINV(IRRRE,IRRRI) EQ 0)=XKFX('2050',IRRRE,IRRRI)+EPS;",
+        "\n$label unconstrained\n;\n* Ensure symmetry\nXMAXINV(IRRRE,IRRRI)=MAX(XMAXINV(IRRRI,IRRRE),XMAXINV(IRRRE,IRRRI));\n$ifi %tyndp2039%==yes XMAXINV(IRRRE,IRRRI)$(XMAXINV(IRRRE,IRRRI) EQ 0 and (XKFX('2050',IRRRE,IRRRI) or XINVCOST('2050', IRRRE,IRRRI)))=XKFX('2050',IRRRE,IRRRI)+EPS;",
         "\n;\nXKFX('2024',IRRRE,IRRRI)=XKFX1(IRRRE,IRRRI);\nXKFX1(IRRRE,IRRRI)=0;\nXKFX('2024','DE4-N','DE4-W')=8634;\nXKFX('2024','DE4-N','DE4-E')=3010;\nXKFX('2024','DE4-W','DE4-N')=8634;\nXKFX('2024','DE4-W','DE4-E')=6020;\nXKFX('2024','DE4-W','DE4-S')=14416;\nXKFX('2024','DE4-E','DE4-N')=3010;\nXKFX('2024','DE4-E','DE4-W')=6020;\nXKFX('2024','DE4-E','DE4-S')=3010;\nXKFX('2024','DE4-S','DE4-W')=14416;\nXKFX('2024','DE4-S','DE4-E')=3010;\nXKFX('2024','NO2','NO1')=3500;\nXKFX('2024','NO1','NO2')=2200;\nXKFX('2024','NO5','NO2')=600;\nXKFX('2024','NO2','NO5')=500;\nXKFX('2024','NO1','NO5')=300;\nXKFX('2024','NO5','NO1')=3900;\nXKFX(Y,IRRRE,IRRRI)=XKFX('2024',IRRRE,IRRRI);",
     ]
 
@@ -321,24 +321,26 @@ def hydrogen_transmission():
     df.loc["SE3", "FIN"] = df.loc["SE3", "FIN"] / 2
     df.loc["FIN", "SE3"] = df.loc["FIN", "SE3"] / 2
 
-    # Internal DE links come from the offshore KF connection between DK2 and DE4-E
-    df.loc["DE4-E", "DE4-S"] = 0
-    df.loc["DE4-E", "DE4-N"] = 0
-    df.loc["DE4-E", "DE4-W"] = 0
-    df.loc["DE4-N", "DE4-E"] = 0
-    df.loc["DE4-S", "DE4-W"] = 0
-    df.loc["DE4-N", "DE4-S"] = 0
-    df.loc["DE4-N", "DE4-W"] = 0
-    df.loc["DE4-S", "DE4-E"] = 0
-    df.loc["DE4-W", "DE4-E"] = 0
-    df.loc["DE4-W", "DE4-N"] = 0
-    df.loc["DE4-W", "DE4-S"] = 0
+    # Internal links are set to max incoming for the country
+    max_incoming = df.loc[:, ["DE4-S", "DE4-N", "DE4-W", "DE4-E"]].max().max()
+    df.loc["DE4-E", ["DE4-S", "DE4-N", "DE4-W"]] = max_incoming
+    df.loc["DE4-S", ["DE4-E", "DE4-N", "DE4-W"]] = max_incoming
+    df.loc["DE4-N", ["DE4-S", "DE4-E", "DE4-W"]] = max_incoming
+    df.loc["DE4-W", ["DE4-S", "DE4-E", "DE4-N"]] = max_incoming
+    max_incoming = df.loc[:, ["SE1", "SE2", "SE3", "SE4"]].max().max()
+    df.loc["SE1", ["SE2", "SE3", "SE4"]] = max_incoming
+    df.loc["SE2", ["SE1", "SE3", "SE4"]] = max_incoming
+    df.loc["SE3", ["SE1", "SE2", "SE4"]] = max_incoming
+    df.loc["SE4", ["SE1", "SE2", "SE3"]] = max_incoming
+    max_incoming = df.loc[:, "DK1"].max().max()
+    df.loc["DK1", "DK2"] = max_incoming
+    df.loc["DK2", "DK1"] = max_incoming
 
     # Create .inc file
     incfile = IncFile(
         name="HYDROGEN_XH2MAXINV",
         prefix="TABLE XH2MAXINV(IRRRE,IRRRI)   'Max investment in hydrogen transmission capacity between two regions for each simulated year(each 5th year)'\n$ifi not %tyndp2039%==yes  $goto unconstrained\n",
-        suffix="\n$label unconstrained\n;\n* Ensure symmetry\nXH2MAXINV(IRRRE,IRRRI)=MAX(XH2MAXINV(IRRRI,IRRRE),XH2MAXINV(IRRRE,IRRRI));\n$ifi %tyndp2039%==yes XH2MAXINV(IRRRE,IRRRI)$(XH2MAXINV(IRRRE,IRRRI) EQ 0)=XH2KFX('2050',IRRRE,IRRRI) + EPS;",
+        suffix="\n$label unconstrained\n;\n* Ensure symmetry\nXH2MAXINV(IRRRE,IRRRI)=MAX(XH2MAXINV(IRRRI,IRRRE),XH2MAXINV(IRRRE,IRRRI));\n$ifi %tyndp2039%==yes XH2MAXINV(IRRRE,IRRRI)$(XH2MAXINV(IRRRE,IRRRI) EQ 0 and (XH2KFX('2050',IRRRE,IRRRI) or XH2INVCOST('2050', IRRRE,IRRRI)))=XH2KFX('2050',IRRRE,IRRRI) + EPS;",
         path="analysis/Balmorel/base/data",
     )
     df = df.astype(object)
