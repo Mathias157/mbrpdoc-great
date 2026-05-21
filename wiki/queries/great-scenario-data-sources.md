@@ -18,15 +18,16 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 | Dimension | Baseline | Pessimistic Variant | Data Need |
 |-----------|----------|---------------------|-----------|
-| 1. EV Electrification | Current assumptions | Pessimistic 2050 EV fleet scenario | Quantified fleet growth rate / stock data |
-| 2. V2G Adoption | Smart bidirectional charging | Dumb uni-directional charging | Exogenous V2G capacity profile |
-| 3. Heat-Pump Penetration | Current assumptions | Reduced residential HP adoption | HP penetration % by region; LCA/cost barriers data |
-| 4. Isolationism (Electricity + Hydrogen) | Unconstrained (elec. + H₂) | Constrained: ref. grid + candidates ≤2040 (elec.); "low infrastructure" for H₂ (ref. + 2030) | TYNDP transmission caps; baseline/pessimistic split |
-| 5. Industry Electrification | Current assumptions | Reduced PtX in industry | Industry electrification scenarios; PtX adoption % |
-| 6. Hydrogen Demand | Baseline H₂ demand | IEA pessimistic H₂ scenario | IEA projections; Kountouris baseline assumptions |
-| 7. Electrolyser Flexibility | Flexible operation + storage | Fixed transport H₂ profile | Assumed constant H₂ transport demand profile |
-| 8. Large-Scale Storage | Optimal sizing | Pessimistic availability | LCA / space-usage / policy constraints |
-| 9. Datacentre Flexibility | Flat demand + flexible response | Flat demand only | TYNDP2024 datacentre demand; DR potential definition |
+| 1. EV Electrification | 230 mio. vehicles (Möring et al. 2025) | 179 mio. vehicles (pessimistic) | EV fleet projections (Consensus.app) |
+| 2. V2G Adoption | Smart bidirectional charging (V2G) | Dumb uni-directional charging | Exogenous charging profile (German highway data) |
+| 3. Heat-Pump Penetration | High adoption (no restriction) | Historic trend-based rollout | Regional HP penetration rates |
+| 4. Heat Efficiency | High energy efficiency scenario | Frozen efficiency (Johannsen et al. 2023) | Industrial/residential efficiency scenarios |
+| 5. Isolationism (Electricity) | Unconstrained transmission | TYNDP2024 ref. grid + candidates ≤2039 | TYNDP2024 transmission caps |
+| 6. Isolationism (Hydrogen) | Unconstrained H₂ infrastructure | TYNDP2024 "low infrastructure" (ref. + 2030) | TYNDP2024 H₂ network constraints |
+| 7. Hydrogen Demand | Kountouris et al. 2024 baseline | TYNDP2024 demand | H₂ demand projections (IEA/TYNDP) |
+| 8. Electrolyser Flexibility | Flexible operation + storage | Inflexible (constant transport profile) | H₂ transport demand profile |
+| 9. Large-Scale Storage | Optimal sizing (baseline restrictions) | 50% reduction (hydrogen, heat, combined) | LCA/space constraints |
+| 10. Datacentre Flexibility | Flat demand + 31–100% DSM capacity | Flat demand only (0% DSM) | Datacentre DR potential (TYNDP2024) |
 
 ---
 
@@ -75,20 +76,18 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ### 3. Heat-Pump Penetration (Residential)
 
-**Current Status**: ❌ No source identified  
-**Data Required**: Regional residential HP penetration rates; barriers to adoption (cost, retrofit difficulty)
+**Current Status**: ✅ Updated 2026-05-21
+**Data Required**: Regional residential HP penetration rates; historic trend data
 
 **Action Items**:
-- [ ] Search: "Heat pump adoption barriers Europe 2050" (IEA, IRENA, AGORA)
-- [ ] Find: regional penetration projections (% of buildings with heat pumps) for pessimistic scenario
-- [ ] Quantify: reduction vs. baseline (e.g., baseline 70% → pessimistic 40%)
-- [ ] If not found: use assumption (see below)
+- [x] Use historic trend-based rollout for pessimistic scenario (per [[GREAT Scenarios]] vault-mirror)
+- [ ] Cross-check with Heatmap Europe v5 for pessimistic adoption scenarios
+- [ ] Quantify: high adoption (baseline) vs. historic trend (pessimistic)
 
-**Assumptions if Source Not Found**:
-- Pessimistic residential HP penetration = 40% by 2050 (vs. baseline 70%)
-- Heat pump adoption bottleneck = retrofit costs + social acceptance + distribution grid constraints
-- Reduce power-to-heat flexibility capacity in individual heating areas by 40%
-- Document source and reasoning in assumptions log
+**Assumptions**:
+- Pessimistic = historic trend (social/retrofit barriers)
+- Baseline = high adoption (no restrictions)
+- Document in assumptions log
 
 **Suggested Sources** (if available):
 - IEA Technology Roadmap: Heat Pumps
@@ -97,30 +96,23 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ---
 
-### 4. Isolationism / Electricity Transmission Constraints
+### 4. Isolationism / Transmission Constraints
 
-**Current Status**: ✅ Baseline rule created; hydrogen rule in progress
+**Current Status**: ✅ Updated 2026-05-21
+**Finding**: Balmorel investments exceed TYNDP2024 ref. + candidates (e.g., 5 GW vs. 2.4 GW Belgium–UK).
 
-**Finding**: Comparison of TYNDP2024 reference grid + investment candidates up to 2039 to Balmorel investment optimisation scenario shows Balmorel investments surpass TYNDP ref. + candidates. Example: 5 GW line Belgium–UK in 2040, vs. TYNDP reference + candidates 2.4 GW.
-
-**URLs**: 
-- [TYNDP2024 Reference Grid & Investment Candidates](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/20231103-Electricity-and-Hydrogen-Reference-Grid-Investment-Candidates.xlsx.zip)
-- [TYNDP2024 Line Data](https://2024-data.entsos-tyndp-scenarios.eu/files/scenarios-inputs/Line-data.zip)
-
-**Data Included**: Reference grid topology, transmission investment candidates (both electricity & hydrogen), line-level data
-
-**Decision**:
-- **Electricity baseline (isolationism=False)**: Unconstrained (no TYNDP limits; Balmorel optimizes freely)
-- **Electricity pessimistic (isolationism=True)**: TYNDP2024 reference grid + investment candidates before 2040
-- **Hydrogen baseline (H₂ expansion=True)**: Unconstrained (no TYNDP limits)
-- **Hydrogen pessimistic (H₂ expansion=False)**: TYNDP2024 "low infrastructure" scenario (reference grid + 2030 candidates only, no 2040 expansion)
+**Decision (2026-05-21)**:
+- **Electricity baseline**: Unconstrained
+- **Electricity pessimistic**: TYNDP2024 ref. grid + candidates ≤2039
+- **Hydrogen baseline**: Unconstrained
+- **Hydrogen pessimistic**: TYNDP2024 "low infrastructure" (ref. + 2030 only)
 
 **Action Items**:
 - [x] Download TYNDP2024 files → `data/tyndp-2024/`
-- [x] Create `analysis/preprocessing/grids.py::electricity_transmission()` — generates XMAXINV.inc for electricity
-- [ ] Create `analysis/preprocessing/grids.py::hydrogen_transmission()` — generates hydrogen constraints from TYNDP "low infrastructure" scenario
-- [ ] Cross-check with Theo's prior analysis (vault-mirror notes mention transmission sensitivity)
-- [ ] Verify against GREAT current assumptions for baseline transmission
+- [x] Create `grids.py::electricity_transmission()` (XMAXINV.inc)
+- [x] Create `grids.py::hydrogen_transmission()` (H₂ constraints)
+- [x] Exclude non-existing connections (GAMS `$` condition)
+- [ ] Cross-check with Theo's analysis
 
 **Implementation Notes**: 
 - `grids.py::electricity_transmission()` produces `XMAXINV.inc` constraining transmission to TYNDP ref. + candidates before 2040.
@@ -156,21 +148,15 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ### 6. Hydrogen Demand
 
-**Current Status**: ⚠️ Partial source  
-**Sources Mentioned**:
-- IEA pessimistic H₂ demand case
-- Kountouris baseline assumptions (in model or Theo's work)
+**Current Status**: ✅ Updated 2026-05-21
+**Sources**:
+- Baseline: Kountouris et al. 2024
+- Pessimistic: TYNDP2024 (current GREAT implementation)
 
 **Action Items**:
-- [ ] Find IEA H₂ demand scenarios (pessimistic case): [IEA Global Hydrogen Review](https://www.iea.org/reports/global-hydrogen-review)
-- [ ] Extract 2050 hydrogen demand (EU / Nordic focus) for pessimistic vs. baseline
-- [ ] Cross-check against current GREAT model assumptions (ask Theo/Kountouris)
-- [ ] Document: baseline H₂ demand (PJ/yr) vs. pessimistic (PJ/yr) by application (transport, industry, etc.)
-
-**Assumptions if Source Not Found**:
-- Pessimistic H₂ = 30% reduction vs. baseline (e.g., baseline 200 PJ → pessimistic 140 PJ by 2050)
-- Rationale: continued fossil fuels, slower CCS deployment, competition with biofuels
-- Document source and reasoning
+- [x] Use TYNDP2024 demand for pessimistic case
+- [ ] Cross-check with IEA Global Hydrogen Review for validation
+- [ ] Document baseline vs. pessimistic demand by application
 
 **Related Dimensions**: Links to Industry Electrification (#5) and Isolationism (#4) — more CCS in isolated system may reduce H₂ demand.
 
@@ -200,20 +186,17 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 ### 8. Large-Scale Energy Storage (Pessimistic Scenario)
 
-**Current Status**: ❌ No source identified  
-**Data Required**: Storage constraints from LCA / space availability / policy; reduced storage capacity
+**Current Status**: ✅ Updated 2026-05-21
+**Data Required**: Storage constraints (LCA/space/policy)
 
 **Action Items**:
-- [ ] Search: "Energy storage LCA constraints" or "Grid energy storage availability scenarios"
-- [ ] Find: regional storage potential limits (MWh capacity) for pessimistic case
-- [ ] Or: find multi-energy storage trade-offs (battery vs. hydrogen vs. heat storage)
-- [ ] If not found: use assumption (see below)
+- [x] Split into 3 dimensions: hydrogen, heat, combined storage
+- [x] Pessimistic: 50% reduction vs. optimal sizing (baseline)
+- [ ] Validate with LCA/space-usage studies
 
-**Assumptions if Source Not Found**:
-- Pessimistic storage = 50% reduction in large-scale capacity vs. baseline
-- Rationale: LCA constraints (lithium/rare earths), space limitations, policy barriers
-- Or: assume only hydrogen storage available (no battery storage > 1 day)
-- Document in assumptions log
+**Assumptions**:
+- Pessimistic = 50% reduction (hydrogen, heat, combined)
+- Baseline = optimal sizing (current restrictions)
 
 **Suggested Sources** (if available):
 - IEA Energy Storage Technology Roadmap
@@ -255,16 +238,16 @@ The GREAT project builds a 9×9 scenario matrix (81 combinations + operational r
 
 | Dimension | Assumption | Rationale | Source | Status |
 |-----------|-----------|-----------|--------|--------|
-| EV Electrification | TBD | Pending consensus.app review | Pending | ⏳ |
-| V2G Adoption | TBD | Needs definition | Vault notes | ⏳ |
-| Heat-Pump Penetration | 40% residential by 2050 (vs. baseline 70%) | Retrofit cost barriers | Assumption | ⏳ |
-| Isolationism (Electricity) | Pessimistic: ref. grid + candidates ≤2040; Baseline: unconstrained | TYNDP2024 bounds restraint vs. cost-optimal unconstrained | TYNDP2024 empirical | ✅ |
-| Hydrogen Expansion | Pessimistic: "low infrastructure" (ref. grid + 2030 only); Baseline: unconstrained | TYNDP scenarios differentiate H₂ ambition vs. unconstrained | TYNDP2024 low/high infrastructure | ✅ |
-| Industry Electrification | 30% reduction in industrial PtX | Continued fossil + CCS | Assumption | ⏳ |
-| Hydrogen Demand | 30% reduction vs. baseline | Slower H₂ adoption | IEA (TBD) | ⏳ |
-| Electrolyser Flexibility | Constant transport profile | High capacity factor targets | Assumption | ⏳ |
-| Large-Scale Storage | 50% capacity reduction | LCA + space constraints | Assumption | ⏳ |
-| Datacentre Flexibility | 0% demand response (pessimistic) | No flexible workload shifting | Assumption | ⏳ |
+| EV Electrification | 179 mio. vehicles (pessimistic) | Möring et al. 2025 | [[EV Scenarios in Balmorel]] | ✅ |
+| V2G Adoption | Dumb charging (pessimistic) | Social/technical barriers | Vault-mirror [[GREAT Scenarios]] | ✅ |
+| Heat-Pump Penetration | Historic trend (pessimistic) | Retrofit/social barriers | Vault-mirror [[GREAT Scenarios]] | ✅ |
+| Heat Efficiency | Frozen efficiency (pessimistic) | Johannsen et al. 2023 | [[@johannsenExploringPathways1002023]] | ✅ |
+| Isolationism (Electricity) | TYNDP2024 ref. + candidates ≤2039 | Political constraints | TYNDP2024 | ✅ |
+| Isolationism (Hydrogen) | TYNDP2024 "low infrastructure" | Political constraints | TYNDP2024 | ✅ |
+| Hydrogen Demand | TYNDP2024 demand (pessimistic) | Kountouris et al. 2024 (baseline) | TYNDP2024 | ✅ |
+| Electrolyser Flexibility | Inflexible (constant profile) | High capacity factor targets | Vault-mirror [[GREAT Scenarios]] | ✅ |
+| Large-Scale Storage | 50% reduction (hydrogen/heat/combined) | LCA/space constraints | Vault-mirror [[GREAT Scenarios]] | ✅ |
+| Datacentre Flexibility | 0% DSM (pessimistic) | No flexible workloads | Vault-mirror [[GREAT Scenarios]] | ✅ |
 
 ---
 
@@ -301,14 +284,9 @@ data/
 - Assumptions log: populate with specific values and revisit triggers
 
 ### To Do ⏳
-- [ ] Download TYNDP2024 data (use Snakemake rule in `rules/download_data.smk`)
-- [ ] Extract & quantify EV pessimistic scenario from Consensus papers
-- [ ] Find or assume HP adoption barriers study
-- [ ] Find or assume industry electrification scenario
-- [ ] Find IEA H₂ demand pessimistic case
-- [ ] Define electrolyser constant profile (or get from literature)
-- [ ] Define large-scale storage constraints
-- [ ] Finalize datacentre demand response potential
+- [ ] Cross-check industrial demands: Balmorel vs. Johannsen et al. [[@johannsenExploringPathways1002023]] (due 2026-05-22)
+- [ ] Compare datacentre demand: Riepin et al. vs. TYNDP2024+AF25 [[@riepinSpatiotemporalLoadShifting2025]] (due 2026-05-25)
+- [ ] Check Heatmap Europe v5 for HP pessimistic scenarios (due 2026-05-26)
 - [ ] Populate `data/assumptions-log.yaml` with specific numbers
 
 ---

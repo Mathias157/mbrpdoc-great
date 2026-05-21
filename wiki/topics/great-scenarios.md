@@ -45,19 +45,20 @@ and the use of global energy trade as a tool to accelerate decarbonisation.
 
 ## Scenario Dimensions in GREAT
 
-GREAT operationalizes these narratives through 9 binary dimensions, each representing an uncertainty in technology adoption or infrastructure investment:
+GREAT operationalizes these narratives through 9 binary dimensions, each representing an uncertainty in technology adoption or infrastructure investment. Updated 2026-05-21 based on [[GREAT Scenarios]] (vault-mirror):
 
 | Dimension | Baseline | Pessimistic Variant | Connection to Narratives |
 |-----------|----------|---------------------|---------------------------|
-| EV Electrification | High adoption (e.g., 80%+ by 2050) | Pessimistic (e.g., 60% by 2050) | DE: high adoption; GA: moderate adoption |
-| V2G Adoption | Smart 2-way charging | Dumb uni-directional only | DE: V2G enabled; GA: variable |
-| Heat-Pump Penetration | 70% residential by 2050 | 40% (retrofit cost / social barriers) | DE: high HP; GA: mixed (CCS alternative) |
-| Isolationism | Unconstrained (elec. + hydrogen) | Constrained: TYNDP ref. grid + candidates ≤2040 (elec.); hydrogen "low infrastructure" (ref. + 2030 only) | DE: reduced transmission; GA: high transmission |
-| Industry Electrification | High PtX penetration | Reduced (continued fossil + CCS) | DE: high electrification; GA: mixed (CCS + trade) |
-| Hydrogen Demand | Baseline (e.g., 200 PJ/yr) | Pessimistic 30% reduction | GA: high H₂; DE: lower H₂ (more local electrification) |
-| Electrolyser Flexibility | Flexible scheduling + storage | Fixed transport profile (high capacity factor) | GA: flexible; DE: constrained |
-| Large-Scale Storage | Optimal sizing | 50% capacity reduction (LCA / space constraints) | GA: high storage; DE: lower storage (local alternatives) |
-| Datacentre Flexibility | Flat demand + 30% DR capability | Flat demand only (no demand response) | GA: high DR; DE: limited DR |
+| EV Electrification | 230 mio. vehicles by 2050 (Möring et al. 2025) | 179 mio. vehicles (pessimistic roll-out) | DE: high adoption; GA: moderate adoption |
+| V2G Adoption | Smart 2-way charging (V2G) | Dumb uni-directional charging | DE: V2G enabled; GA: variable |
+| Heat-Pump Penetration | High adoption (no restriction) | Historic trend-based rollout (pessimistic) | DE: high HP; GA: mixed (CCS alternative) |
+| Heat Efficiency | High energy efficiency scenario | Frozen efficiency (Johannsen et al. 2023) | DE: high efficiency; GA: variable |
+| Isolationism (Electricity) | Unconstrained transmission | TYNDP2024 ref. grid + candidates ≤2039 | DE: reduced transmission; GA: high transmission |
+| Isolationism (Hydrogen) | Unconstrained H₂ infrastructure | TYNDP2024 "low infrastructure" (ref. + 2030 only) | DE: limited H₂; GA: high H₂ |
+| Hydrogen Demand | Kountouris et al. 2024 baseline | TYNDP2024 (current GREAT) demand | GA: high H₂; DE: lower H₂ |
+| Electrolyser Flexibility | Flexible operation + storage | Inflexible (constant transport profile) | GA: flexible; DE: constrained |
+| Large-Scale Storage | Optimal sizing (baseline restrictions) | 50% reduction (hydrogen, heat, combined) | GA: high storage; DE: lower storage |
+| Datacentre Flexibility | Flat demand + 31–100% DSM capacity | Flat demand only (0% DSM) | GA: high DR; DE: limited DR |
 
 **Full reference**: [[great-scenario-data-sources]]
 
@@ -67,12 +68,17 @@ GREAT operationalizes these narratives through 9 binary dimensions, each represe
 
 ### Scenario Construction Logic
 
-Per vault-mirror notes ([[GREAT Scenarios]]), two schools of thought:
+Per vault-mirror notes ([[GREAT Scenarios]], updated 2026-05-21):
 
-1. **Explicit sector coupling** (Baseline): Full endogenous representation of V2G, heat pumps, electrolysers. High model fidelity but computationally expensive (81 × 40 weather years = 3,240 operational runs).
+1. **Explicit sector coupling** (Baseline): Full endogenous representation of V2G, heat pumps, electrolysers. High model fidelity but computationally expensive (9×9 = 81 investment combinations × 40 weather years = 3,240 operational runs).
 2. **Exogenous profiles** (Pessimistic alternative): Replace endogenous sectors with fixed profiles (e.g., dumb charging for V2G, constant H₂ transport demand). Lower computational cost; requires careful assumption calibration.
 
-GREAT is exploring both; see [[How detailed cross-sector modelling changes electricity-system results]] (vault-mirror) for methodological context.
+**Key updates from 2026-05-21 discussion with Rasmus:**
+- Large-scale storage split into three dimensions: hydrogen storage, heat storage, and combined storage availability (50% reduction each for pessimistic case).
+- Heat efficiency added as a separate dimension (high vs. frozen efficiency, Johannsen et al. 2023).
+- Hydrogen transmission now explicitly constrained in pessimistic case (TYNDP2024 "low infrastructure" scenario).
+
+GREAT is exploring both approaches; see [[How detailed cross-sector modelling changes electricity-system results]] (vault-mirror) for methodological context.
 
 ### Prioritization
 
@@ -84,13 +90,17 @@ Early analysis from Theo (vault-mirror [[GREAT Scenarios]]) identifies **transmi
 
 ### Data Collection
 
-Nine dimensions require data validation or assumption refinement:
+Nine dimensions require data validation or assumption refinement (updated 2026-05-21):
 
-- **EV pessimistic scenario**: Extract from Consensus.app European EV fleet studies
-- **HP adoption barriers**: Find regional retrofit-cost studies or assume 40% baseline
-- **Industry electrification**: IEA or McKinsey decarbonization scenarios
-- **Large-scale storage constraints**: LCA / resource availability studies
-- **Datacentre demand-response potential**: Define % of workload shiftable (suggest 20–50%)
+- **EV pessimistic scenario**: 179 mio. vehicles (Möring et al. 2025, [[EV Scenarios in Balmorel]])
+- **Heat-pump penetration**: Historic trend-based rollout (pessimistic); high adoption (baseline)
+- **Heat efficiency**: Frozen efficiency (Johannsen et al. 2023) vs. high efficiency
+- **Isolationism (Electricity)**: TYNDP2024 ref. grid + candidates ≤2039 (pessimistic)
+- **Isolationism (Hydrogen)**: TYNDP2024 "low infrastructure" (ref. + 2030 only)
+- **Hydrogen demand**: TYNDP2024 (pessimistic) vs. Kountouris et al. 2024 (baseline)
+- **Electrolyser flexibility**: Inflexible (constant transport profile) vs. flexible
+- **Large-scale storage**: 50% reduction (hydrogen, heat, combined) vs. optimal sizing
+- **Datacentre flexibility**: 0% DSM (pessimistic) vs. 31–100% DSM capacity
 
 See [[great-scenario-data-sources]] for detailed action items and assumption log.
 
