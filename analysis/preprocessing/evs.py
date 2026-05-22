@@ -47,15 +47,28 @@ def main(dark):
         index="YYY", columns="RRR", values="Value", aggfunc=lambda x: np.sum(x) / 1e6
     )
 
-    fig, ax = plt.subplots()
-    df.plot(ax=ax, kind="area")
-    ax.set_facecolor(fc)
-    ax.legend(loc="center right", bbox_to_anchor=(1.5, 0.5), ncols=2)
-    ax.set_ylabel("EV Vehicles [mio.]")
-    ax.set_xlabel("")
-    ax.set_xlim([2025, 2050])
+    # High EV scenario
+    fig = plt.figure(figsize=(7, 5))
+    gs = fig.add_gridspec(2, hspace=0.3)
+    ax1, ax2 = gs.subplots(sharex=True)
+    df.plot(ax=ax1, kind="area", legend=False)
+    ax1.set_facecolor(fc)
+    ax1.set_ylim([0, 250])
+    ax1.set_ylabel("EV Vehicles [mio.]")
+    ax1.set_title("High EV scenario")
+
+    # Low EV scenario
+    df = df / 0.95 * 0.78
+    df.plot(ax=ax2, kind="area")
+    ax2.set_facecolor(fc)
+    ax2.legend(loc="center right", bbox_to_anchor=(1.44, 1.1), ncols=2)
+    ax2.set_ylabel("EV Vehicles [mio.]")
+    ax2.set_xlabel("")
+    ax2.set_title("Low EV scenario")
+    ax2.set_ylim([0, 250])
+    ax2.set_xlim([2025, 2050])
     fig.savefig(
-        "analysis/plots/ev_evolution_before.pdf",
+        "analysis/plots/ev_scenarios.pdf",
         bbox_inches="tight",
         transparent=True,
     )
