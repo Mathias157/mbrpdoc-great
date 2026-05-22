@@ -19,11 +19,11 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import matplotlib.pyplot as plt
-from analysis.formats import setup_plot
+from analysis.utils import load_industry_production
 import pandas as pd
 import numpy as np
 import click
-from pybalmorel import Balmorel, MainResults
+from pybalmorel import Balmorel
 from pybalmorel.formatting import balmorel_colours
 
 balmorel_colours["Electricity"] = "#3f7fa3"
@@ -69,19 +69,6 @@ def load_current_demand():
     return df
 
 
-def load_industry_production(scenario):
-    results = MainResults(
-        "MainResults_%s" % scenario,
-        paths="analysis/Balmorel/base/model",
-        system_directory=os.getenv("GAMS_SYSTEM_DIR"),
-    )
-    df = results.get_result("PRO_YCRAGF").query(
-        '(Area.str.contains("IND") or Commodity == "HYDROGEN") and Commodity != "ELECTRICITY"'
-    )
-    print(df)
-    return df
-
-
 # ------------------------------- #
 #            2. Main              #
 # ------------------------------- #
@@ -117,7 +104,7 @@ def current_demand():
 
 
 @main.command()
-@click.argument("scenario", type=str, default="APS_base_allflex_INV.gdx")
+@click.argument("scenario", type=str, default="APS_base_allflex_INV")
 def electrify_extent(scenario):
     """To which extent is Balmorel electrifying industry, based on a scenario result?"""
 
