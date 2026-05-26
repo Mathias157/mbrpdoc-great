@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from pybalmorel import MainResults
+from .formats import setup_plot
 
 
 def load_excel_sheet(filename, sheet_name, headers):
