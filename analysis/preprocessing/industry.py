@@ -69,6 +69,21 @@ def load_current_demand():
     return df
 
 
+def load_high_ee_demand():
+
+    df = load_current_demand()
+    idx = df.query(
+        '(Commodity == "Heat" or Commodity == "Hydrogen") and YYY == "2030"'
+    ).index
+    df.loc[idx, "Value"] = df.loc[idx, "Value"] * 0.87107
+    idx = df.query(
+        '(Commodity == "Heat" or Commodity == "Hydrogen")  and YYY == "2050"'
+    ).index
+    df.loc[idx, "Value"] = df.loc[idx, "Value"] * 0.69961
+
+    return df
+
+
 # ------------------------------- #
 #            2. Main              #
 # ------------------------------- #
@@ -81,26 +96,29 @@ def main():
 
 
 @main.command()
-def current_demand():
+def demand_scenarios():
     """What is the current assumed demand in Balmorel?"""
 
-    df = load_current_demand()
+    df_base = load_current_demand()
+    df_highee = load_high_ee_demand()
+    names = ["base", "high_ee"]
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    df.query('YYY in ["2016", "2030", "2050"]').pivot_table(
-        index="YYY",
-        columns="Commodity",
-        values="Value",
-        aggfunc=lambda x: np.sum(x) / 1e6 * 3.6,
-    ).plot(ax=ax, kind="bar", stacked=True, color=balmorel_colours)
-    ax.set_ylabel("Industrial Demand [PJ]")
-    ax.set_xlabel("")
-    ax.legend(loc="upper left", ncols=3)
-    fig.savefig(
-        "analysis/plots/balmorel_base_industry.pdf",
-        bbox_inches="tight",
-        transparent=True,
-    )
+    for i, df in enumerate([df_base, df_highee]):
+        fig, ax = plt.subplots(figsize=(7, 4))
+        df.query('YYY in ["2016", "2030", "2050"]').pivot_table(
+            index="YYY",
+            columns="Commodity",
+            values="Value",
+            aggfunc=lambda x: np.sum(x) / 1e6 * 3.6,
+        ).plot(ax=ax, kind="bar", stacked=True, color=balmorel_colours)
+        ax.set_ylabel("Industrial Demand [PJ]")
+        ax.set_xlabel("")
+        ax.legend(loc="lower center", ncols=3, bbox_to_anchor=(0.5, 1))
+        fig.savefig(
+            f"analysis/plots/balmorel_{names[i]}_industry.pdf",
+            bbox_inches="tight",
+            transparent=True,
+        )
 
 
 @main.command()
@@ -117,7 +135,7 @@ def electrify_extent(scenario):
 
     fig = plt.figure(figsize=(6, 5))
     gs = fig.add_gridspec(1, 2, wspace=0)
-    ax1, ax2 = gs.subplots(sharey=True)
+    ax1, ax2 = gs.subplots(sharey=True)  # pyright: ignore
 
     df.query('Commodity=="HEAT" and Value > 1e-1').pivot_table(
         index="Year",
