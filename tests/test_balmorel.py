@@ -13,17 +13,19 @@ Created on 19.05.2026
 #        0. Script Settings       #
 # ------------------------------- #
 
-from analysis.utils import load_industry_production
+import os
+import shutil
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 from pybalmorel import Balmorel, IncFile
 from pybalmorel.formatting import balmorel_colours
 
+from analysis.utils import load_industry_production
+
 balmorel_colours["WOODPELLETS"] = "#3f7fa3"
 balmorel_colours["WOODWASTE"] = "#927b5d"
-import numpy as np
-import matplotlib.pyplot as plt
-import os
-from pathlib import Path
-import shutil
 
 model = Balmorel(
     "analysis/Balmorel", gams_system_directory=os.getenv("GAMS_SYSTEM_DIR")
