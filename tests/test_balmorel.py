@@ -1,7 +1,9 @@
 """
 Verifications and Validations for Balmorel
 
-Testing Balmorel for the changes, and making plots
+Testing Balmorel data and model changes
+NOTE:   The current temporal resolution still requires
+        ~12 GB RAM for tests to run!
 
 Created on 19.05.2026
 @author: Mathias Berg Rosendal
@@ -42,14 +44,14 @@ IncFile(
     name="T",
     path=str(data_path),
     prefix="SET T(TTT)  'Time periods within a season in the simulation'",
-    body="""\n/\nT010\n/;""",
+    body="""\n/\nT010,T017\n/;""",
 ).save()
 
 IncFile(
     name="S",
     path=str(data_path),
     prefix="SET S(SSS)  'Seasons in the simulation'",
-    body="""\n/\nS26\n/;""",
+    body="""\n/\nS01,S26\n/;""",
 ).save()
 
 # ------------------------------- #
@@ -58,10 +60,13 @@ IncFile(
 
 
 def test_transmaxinv(balmorel_already_run: bool = True):
+    """Testing constraints on max transmission investments"""
 
     if not balmorel_already_run:
         # Run tests
+        print("\nRunning unconstrained scenario ...")
         model.run("tests", {"--scenario_name": "unconstrained"})
+        print("\nRunning transmission constrained scenario ...")
         model.run("tests", {"--scenario_name": "constrained", "--tyndp2039": "yes"})
 
     # Load results and plot maps
@@ -96,8 +101,10 @@ def test_transmaxinv(balmorel_already_run: bool = True):
 
 
 def test_industry_scenario(balmorel_already_run: bool = True):
+    """Testing industry demand scenario"""
     if not balmorel_already_run:
         # Run tests
+        print("\nRunning high efficiency industry scenario ...")
         model.run(
             "tests",
             {
@@ -121,7 +128,7 @@ def test_industry_scenario(balmorel_already_run: bool = True):
 
     fig = plt.figure(figsize=(6, 10))
     gs = fig.add_gridspec(2, 2, wspace=0, hspace=0.6)
-    (ax1, ax2), (ax3, ax4) = gs.subplots(sharey=True)
+    (ax1, ax2), (ax3, ax4) = gs.subplots(sharey=True)  # pyright: ignore
 
     for df, ax_a, ax_b in [
         (df_before, ax1, ax2),
@@ -155,4 +162,37 @@ def test_industry_scenario(balmorel_already_run: bool = True):
         "analysis/plots/tests/balmorel_results_industry.pdf",
         bbox_inches="tight",
         transparent=True,
+    )
+
+
+def test_datacenter_dsm(balmorel_already_run: bool = True):
+    """Testing datacenter demand response input assumptions"""
+    if not balmorel_already_run:
+        # Run tests
+        print("\nRunning flexible_datacenter scenario ...")
+        model.run(
+            "tests",
+            {
+                "--scenario_name": "flexible_datacenter",
+                "--flexible_datacenter": "yes",
+            },
+        )
+    model.collect_results(suffix_naming_only=True)
+
+    assert (
+        "unconstrained" in model.scfolder_to_scname["tests"]
+        and "flexible_datacenter" in model.scfolder_to_scname["tests"]
+    ), (
+        "Couldn't find MainResults_unconstrained.gdx and MainResults_flexible_datacenter.gdx in tests/model! Run this on HPC with balmorel_already_run = False to produce them"
+    )
+
+    df = (
+        model.results
+        .get_result("DR_FLEX_Y")
+        .query('Scenario in ["flexible_datacenter", "unconstrained"] and Y == "2050"')
+        .pivot_table(index="Scenario", values="Value")
+    )
+
+    assert df.loc["unconstrained", "Value"] < df.loc["flexible_datacenter", "Value"], (
+        "Base scenario ('unconstrained') had lower use of demand response than flexible datacenter scenario!"
     )
