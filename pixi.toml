@@ -43,16 +43,16 @@ test = "snakemake test --cores 4"
 dag = "snakemake dag --cores 1"
 clean = "snakemake clean"
 "clean-all" = "snakemake clean && rm -rf build/"
-analyse = "cd ./scripts/Balmorel && python analysis/analyse.py "
-verify =  "cd ./scripts/Balmorel && python analysis/verify.py "
-sync-down = { cmd = "rsync -avzu --filter=':- .gitignore' mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel/ ./scripts/Balmorel && rsync -avzu --filter=':- .gitignore' mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel/base/data/ ./scripts/Balmorel/base/data", description = "Syncs repository to local, including .git folder, but without gitignored files" }
-sync-up = { cmd = "rsync -avzu --filter=':- .gitignore'  ./scripts/Balmorel/ mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel && rsync -avzu --filter=':- .gitignore'  ./scripts/Balmorel/base/data/ mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel/base/data", description = "Syncs repository to remote, including .git folder, but without gitignored files" }
-sync-plots = { cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/analysis/plots/*' ./scripts/Balmorel/analysis/plots/", description = "Download everything from analysis/plots"}
-sync-output = { cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/analysis/output/*' ./scripts/Balmorel/analysis/output/", description = "Download everything from analysis/output"}
+analyse = "cd ./analysis/Balmorel && python analysis/analyse.py "
+verify =  "cd ./analysis/Balmorel && python analysis/verify.py "
+sync-down = { cmd = "rsync -avzu --filter=':- .gitignore' mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel/ ./analysis/Balmorel && rsync -avzu --filter=':- .gitignore' mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel/base/data/ ./analysis/Balmorel/base/data", description = "Syncs repository to local, including .git folder, but without gitignored files" }
+sync-up = { cmd = "rsync -avzu --filter=':- .gitignore'  ./analysis/Balmorel/ mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel && rsync -avzu --filter=':- .gitignore'  ./analysis/Balmorel/base/data/ mberos@login2.hpc.dtu.dk:/work3/mberos/Balmorel/base/data", description = "Syncs repository to remote, including .git folder, but without gitignored files" }
+sync-plots = { cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/analysis/plots/*' ./analysis/Balmorel/analysis/plots/", description = "Download everything from analysis/plots"}
+sync-output = { cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/analysis/output/*' ./analysis/Balmorel/analysis/output/", description = "Download everything from analysis/output"}
 
 [tasks.sync-mainresults]
 args = ["scenario", {arg="suffix", default="*"}]
-cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/{{ scenario }}/model/MainResults{{ suffix }}.gdx' ./scripts/Balmorel/{{ scenario }}/model/"
+cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/{{ scenario }}/model/MainResults{{ suffix }}.gdx' ./analysis/Balmorel/{{ scenario }}/model/"
 description = "Get MainResults from a scenario folder (first arg) with a certain suffix (second arg, defaults to *)"
 
 [pypi-dependencies]
