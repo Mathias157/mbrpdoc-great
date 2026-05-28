@@ -23,8 +23,7 @@ import numpy as np
 import click
 from pybalmorel import IncFile
 
-from analysis.utils.plotting import setup_plot
-from analysis.utils import load_excel_sheet
+from analysis.utils import load_excel_sheet, setup_plot
 
 # ------------------------------- #
 #          1. Functions           #
@@ -121,7 +120,7 @@ def datacenterload(ctx, scenario):
     ax.set_xlim([2025, 2050])
     ax.set_ylabel("Datacenter Electricity Consumption [TWh]")
     fig.savefig(
-        "wiki/sources/analyses/plots/datacenter_electricity_consumption.pdf",
+        "analysis/plots/datacenter_electricity_consumption.pdf",
         bbox_inches="tight",
         transparent=True,
     )

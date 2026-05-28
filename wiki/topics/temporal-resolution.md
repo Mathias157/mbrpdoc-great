@@ -44,7 +44,7 @@ Increasing term resolution (T) improves adequacy metrics substantially (reducing
 
 ## Data & Analysis Artefacts
 
-Analysis results stored in `wiki/sources/analyses/`:
+Analysis results stored in `analyses/`:
 
 - **`TemporalAggregationFinalResults.ods`** — Comprehensive comparison table (ENS and LOLE metrics across aggregation methods, model years 2030–2050, run types F and R).
 - **`TemporalAggComputationTime.ods`** — Computational trade-offs: run times for various resolution choices (S8T24, S8T42, S12T42, etc.).

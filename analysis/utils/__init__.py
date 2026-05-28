@@ -1,4 +1,7 @@
+import os
 import pandas as pd
+from pybalmorel import MainResults
+from .formats import setup_plot
 
 
 def load_excel_sheet(filename, sheet_name, headers):
@@ -29,3 +32,16 @@ def load_excel_sheet(filename, sheet_name, headers):
                 "Check available sheets with: pd.read_excel(..., sheet_name=None)"
             )
         raise
+
+
+def load_industry_production(scenario, scenario_folder: str = "base"):
+    """Excluding electricity production"""
+    results = MainResults(
+        "MainResults_%s.gdx" % scenario,
+        paths=f"analysis/Balmorel/{scenario_folder}/model",
+        system_directory=os.getenv("GAMS_SYSTEM_DIR"),
+    )
+    df = results.get_result("PRO_YCRAGF").query(
+        '(Area.str.contains("IND") or Commodity == "HYDROGEN") and Commodity != "ELECTRICITY"'
+    )
+    return df

@@ -5,6 +5,7 @@
 - [[great-scenarios]] — GREAT's 9×9 scenario matrix for evaluating flexibility value; grounded in TYNDP 2024 narratives (Distributed Energy, Global Ambition); operationalized through 9 binary dimensions
 - [[nuclear-investment-options]] — Nuclear investment options added to GREAT scenarios based on IEA eTech Brief Update: Nuclear Power in TIMES Modelling (2026)
 - [[temporal-resolution]] — Temporal aggregation strategy for BALMOREL: S=8 seasons, T=24 time-steps often outperforms advanced clustering (related vault-mirror note: `GREAT Temporal Resolution`)
+- [[debugging-max-electricity-transmission]] — Root cause and fix for infeasible transmission constraints (`VXKNACCUMNET.UP < 0`). **Root cause**: `XKFX` (exogenous capacity) was inflated with the sum of TYNDP2024 reference grid + all candidates, leaving no room for endogenous investment. **Fix**: Rebuilt `XKFX` using TYNDP2024 reference grid only, ensuring asymmetrical capacities (e.g., `DE4-S,AT,800` and `AT,DE4-S,7500`).
 
 ## Concepts
 

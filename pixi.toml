@@ -36,6 +36,10 @@ pyxlsb = ">=1.0.10,<2"
 cmcrameri = ">=1.9,<2"
 openpyxl = ">=3.1.5,<4"
 
+[activation.env]
+GAMS_SYSTEM_DIR = "/opt/gams/53"
+LOCAL_BALMOREL_DIR = "analysis/Balmorel"
+
 # --- Tasks ---
 [tasks]
 run = "snakemake --cores 4"

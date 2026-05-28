@@ -1,3 +1,63 @@
+"""Formatting of plots"""
+
+# ------------------------------- #
+#        0. Script Settings       #
+# ------------------------------- #
+
+import cmcrameri.cm as cmc
+import matplotlib.pyplot as plt
+import yaml
+
+# ------------------------------- #
+#          1. Functions           #
+# ------------------------------- #
+
+
+def setup_plot(
+    colourmap: str = "",
+    dark: bool = False,
+    colour_range: tuple = tuple(range(0, 255, 52)),
+):
+    """
+    Replace matplotlib's default colormap with cmcrameri (perceptually uniform,
+    color-deficiency friendly) and set related style parameters.
+
+    Returns: facecolor (str): Value for ax.set_facecolor function
+    """
+
+    if colourmap == "":
+        with open("config/default.yaml", "r") as f:
+            config = yaml.safe_load(f)
+        if dark:
+            colourmap = config["dark_colourmap"]
+        else:
+            colourmap = config["white_colourmap"]
+        print(f"setting colourmap to {colourmap}")
+
+    if dark:
+        plt.style.use("dark_background")
+        facecolor = "none"  # Facecolor
+    else:
+        facecolor = "white"
+
+    # Set default colormap to 'batlow' (perceptually uniform, works for ~95% color vision)
+    plt.rcParams["image.cmap"] = "cmc." + colourmap
+
+    # Optional: set line color cycle for multi-line plots
+    # Uses a subset of cmcrameri colors that are distinguishable across color-vision deficiencies
+    plt.rcParams["axes.prop_cycle"] = plt.cycler(  # type: ignore
+        color=[getattr(cmc, colourmap)(i) for i in colour_range]
+    )
+
+    # Improve figure defaults
+    plt.rcParams["figure.figsize"] = (7, 4)
+    plt.rcParams["figure.dpi"] = 100
+    plt.rcParams["savefig.dpi"] = 300
+    plt.rcParams["font.size"] = 11
+
+    return facecolor
+
+
 B2A_regi = {
     "AL": ["AL00"],
     "AT": ["AT00"],
@@ -114,8 +174,10 @@ tynd_to_balmorel = {
     "BG00": "BG",
     "CH00": "CH",
     "DE00": ["DE4-E", "DE4-N", "DE4-S", "DE4-W"],
+    "DE": ["DE4-E", "DE4-N", "DE4-S", "DE4-W"],
     "DEKF": "DE4-E",
     "DKW1": "DK1",
+    "DK": "DK1",
     "ES00": "ES",
     "FR00": "FR",
     "FR15": "FR",
@@ -128,13 +190,15 @@ tynd_to_balmorel = {
     "EE00": "EE",
     "EG00": None,
     "FI00": "FIN",
+    "FI": "FIN",
+    "IBFI": "FIN",
     "GR00": "GR",
     "GR03": "GR",
     "HR00": "HR",
     "HU00": "HU",
     "ITCS": "IT",
     "ITCO": "IT",
-    "IL00": "IL",
+    "IL00": None,
     "LT00": "LT",
     "LV00": "LV",
     "SE02": "SE2",
@@ -161,6 +225,7 @@ tynd_to_balmorel = {
     "ITS1": "IT",
     "ITSA": "IT",
     "ITSIvirt": None,
+    "IBIT": "IT",
     "IS00": None,
     "SI00": "SI",
     "LUG1": "LU",
@@ -170,11 +235,12 @@ tynd_to_balmorel = {
     "LY00": None,
     "MT00": "MT",
     "TR00": "TR",
-    "UKNI": "UK",
+    "UKNI": "IE",
     "PS00": None,
     "RS00": "RS",
     "SK00": "SK",
     "SE04": "SE4",
+    "SE": ["SE1", "SE2", "SE3", "SE4"],
     "PT00": "PT",
     "TN00": None,
     "ITCA": "IT",

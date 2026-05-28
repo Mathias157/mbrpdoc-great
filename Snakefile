@@ -20,7 +20,7 @@ min_version("8.0")
 rule all:
     message: "Run entire analysis and compile LaTeX report."
     input:
-        "build/report.pdf",
+        "build/main.pdf",
         "build/test.success",
 
 rule preprocessing:
@@ -34,11 +34,14 @@ rule preprocessing:
         ]
     output:
         "analysis/Balmorel/base/data/DE_DATACENTER.inc",
-        "analysis/Balmorel/base/data/XMAXINV.inc"
+        "analysis/Balmorel/base/data/XMAXINV.inc",
+        "analysis/Balmorel/base/data/XKFX.inc",
+        "analysis/Balmorel/base/data/HYDROGEN_XH2MAXINV.inc"
     shell:
         """
         python analysis/preprocessing/datacentres.py datacenterload
-        python analysis/preprocessing/grids.py
+        python analysis/preprocessing/grids.py electricity-transmission
+        python analysis/preprocessing/grids.py hydrogen-transmission
         """
 
 rule run:
@@ -68,16 +71,16 @@ rule copy_figures:
     message: "Copy figures to report directory."
     input: "build/test.success"
     params:
-        wiki_path="wiki/sources/analyses/plots",
+        plot_path="analysis/plots",
         build_path="build",
         output_path="report/figures",
     output:
-        glob("report/figures/*.pdf")
+        "report/figures/plot.pdf",
+        "report/figures/datacenter_electricity_consumption.pdf",
     shell:
         """
-        mkdir -p report/figures
         cp {params.build_path}/plot.pdf {params.output_path}/
-        cp {params.wiki_path}/datacenter_electricity_consumption.pdf {params.output_path}/
+        cp {params.plot_path}/datacenter_electricity_consumption.pdf {params.output_path}/
         """
 
 
@@ -88,12 +91,11 @@ rule latex_report:
         preamble="report/preamble.tex",
         bib="report/bibliography.bib",
         figures=rules.copy_figures.output,
-    output: "build/report.pdf"
+    output: "build/main.pdf"
     shell:
         """
         cd report
         latexmk -pdf main.tex
-        mv ../build/main.pdf ../build/report.pdf
         """
 
 

@@ -72,3 +72,6 @@ wiki/sources/papers/*.PDF
 data/
 wiki/.obsidian/graph.json
 wiki/.obsidian/workspace.json
+
+analysis/plots/
+report/figures
