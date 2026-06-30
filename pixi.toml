@@ -38,7 +38,7 @@ openpyxl = ">=3.1.5,<4"
 premailer = ">=3.10.0,<4"
 
 [activation.env]
-GAMS_SYSTEM_DIR = "/opt/gams/53"
+GAMS_SYSTEM_DIR = "/opt/gams/50.4"
 LOCAL_BALMOREL_DIR = "analysis/Balmorel"
 
 # --- Tasks ---
