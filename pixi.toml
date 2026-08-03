@@ -1,7 +1,7 @@
 [workspace]
 name = "mbrpdoc-great"
 version = "0.1.0"
-description = "A reproducible research template combining Snakemake pipeline, Obsidian wiki, and OpenCode LLM loop"
+description = "GREAT — Balmorel-based energy system modelling of flexibility value across scenarios"
 authors = ["Claude Opus 4.7 <claude@anthropic.com>"]
 channels = ["conda-forge", "bioconda"]
 platforms = ["linux-64"]
@@ -15,6 +15,7 @@ platforms = ["linux-64"]
 [dependencies]
 python = "3.12.*"
 snakemake = ">=9.8"
+click = "*"
 # Analysis tools
 numpy = "2.3.*"
 pandas = "2.3.*"
@@ -38,7 +39,7 @@ openpyxl = ">=3.1.5,<4"
 premailer = ">=3.10.0,<4"
 
 [activation.env]
-GAMS_SYSTEM_DIR = "/opt/gams/50.4"
+GAMS_SYSTEM_DIR = "/opt/gams/53"
 LOCAL_BALMOREL_DIR = "analysis/Balmorel"
 
 # --- Tasks ---
