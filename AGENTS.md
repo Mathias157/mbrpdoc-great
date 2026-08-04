@@ -7,13 +7,14 @@ project is; this file is the operational protocol.
 
 ```
 .
-├── Snakefile                   # The DAG: data -> analysis -> report + tests
+├── Snakefile                   # The DAG: data -> preprocessing -> report + tests
 ├── rules/                      # Additional Snakemake rules (e.g. download_data.smk)
 ├── config/default.yaml         # Pipeline parameters
 ├── profiles/default/           # Snakemake profile
-├── analysis/                   # Analysis scripts
+├── scripts/                    # GREAT-specific preprocessing scripts (feed Balmorel inputs)
 │   └── Balmorel/               # Git submodule (Mathias157/Balmorel) — has its own
-│                                #  nested submodule at base/data
+│                                #  nested submodule at base/data, and its own
+│                                #  analysis/ toolkit (see below)
 ├── report/                     # LaTeX report (compiled to PDF via latexmk)
 ├── tests/                      # Pytest tests of pipeline outputs
 ├── data/                       # Raw input data (gitignored)
@@ -27,7 +28,7 @@ project is; this file is the operational protocol.
 **LLM agents in this repo are forbidden from running `git commit` under any
 circumstances.** Commits are exclusively the user's responsibility.
 
-**Nested submodules.** `analysis/Balmorel` is a git submodule that itself
+**Nested submodules.** `scripts/Balmorel` is a git submodule that itself
 contains a submodule (`base/data`). After cloning or pulling, run:
 
 ```
@@ -41,7 +42,7 @@ or data is missing before checking this.
 
 The DAG runs data → preprocessing → analysis → LaTeX report → tests:
 
-1. Edit `analysis/*.py` (or add new scripts) for new analysis steps.
+1. Edit `scripts/*.py` (or add new scripts) for new analysis steps.
 2. Add corresponding rules in `rules/*.smk` and `include:` them in `Snakefile`.
 3. Update `config/default.yaml` with new parameters.
 4. Add tests to `tests/test_*.py`, referenced as fixtures in `tests/test_runner.py`.
@@ -50,6 +51,65 @@ The DAG runs data → preprocessing → analysis → LaTeX report → tests:
 
 `.github/workflows/reproduction.yaml` re-runs this on every push/PR and
 monthly. Keep it green.
+
+**Note:** the `run`/`plot` rules in `Snakefile` are still the template's demo
+(`scripts/model.py` says so explicitly) — the DAG currently only proves
+preprocessing works end-to-end, it does not run or plot Balmorel yet. Balmorel
+runs themselves happen on HPC, outside the DAG (see below).
+
+## `scripts/` vs. `scripts/Balmorel/analysis/` — Two Different Toolkits
+
+`scripts/` (top level) and the submodule's own `analysis/` folder both exist
+in this repo, but they're deliberately separate and serve different projects:
+
+**`scripts/` (top level, in the DAG).** GREAT-specific, one-off preprocessing
+that turns raw data into Balmorel inputs —
+`preprocessing/{datacentres,evs,grids,industry}.py` write `.inc` files into
+`scripts/Balmorel/base/data/`. Runs via `pixi run snakemake`, per the
+"Snakemake Discipline" section above. This code is not meant to be reused
+outside GREAT.
+
+**`scripts/Balmorel/analysis/` (inside the submodule, NOT in the DAG).** The
+general-purpose Balmorel plotting/analysis toolkit, deliberately kept inside
+the `Balmorel` submodule (not this repo) so it's reusable across future
+Balmorel-based projects, not just GREAT. Run directly against Balmorel
+results, independent of Snakemake:
+
+- `analyse.py` — a large Click CLI (~30 subcommands: `cap`, `production`,
+  `costs`, `LCOE`, `map`, `matrix`, `storage_profile`, `adequacy`,
+  `bar_chart`, `profile`, ...). Invoke via `pixi run analyse <command> [args]`
+  (the pixi task already `cd`s into `scripts/Balmorel`).
+- `verify.py` — sanity checks that a scenario's results aren't nonsensical.
+  Invoke via `pixi run verify <sc-folder> <command>`.
+- `functions/heatmap.py` — results-x-scenarios heatmap plotting (the
+  `CachedResults` class here caches loaded GAMS symbols per-run to avoid
+  re-reading large GDX files).
+- `functions/formats.py`, `functions/pit_storage.py` — shared formatting
+  helpers and storage-profile extraction.
+- `specific/` — one-off analyses that don't belong in the general CLI. If a
+  GREAT-only analysis grows out of `specific/`, it likely belongs in this
+  repo's `scripts/` instead, not the submodule — keep project-specific code
+  out of Balmorel so future projects reusing it aren't cluttered with GREAT's
+  concerns.
+- `plots/`, `files/` — gitignored outputs (rendered plots) and caches
+  (pickled GAMS symbols). Not committed; synced instead (below).
+
+**Why the split:** Balmorel executions require HPC (GAMS/CPLEX), so they
+happen outside this repo's Snakemake DAG, on DTU's LSF cluster (see
+`scripts/Balmorel/jobs/*.sh`, submitted via `bsub`). The actual workflow is:
+
+1. Snakemake preprocessing (top-level `scripts/`) writes Balmorel inputs.
+2. `pixi run sync-up` pushes the repo (incl. inputs) to HPC.
+3. Balmorel investment/fullyear/rolling runs execute on HPC (see
+   `scripts/Balmorel/README.md` for the three-step soft-linking procedure).
+4. `pixi run sync-down` / `sync-plots` / `sync-output` / `sync-mainresults`
+   pull results back.
+5. `pixi run analyse <command>` / `pixi run verify` (submodule's
+   `scripts/Balmorel/analysis/`) produce plots and checks from those results.
+6. Plots/tables feed into `report/` (LaTeX).
+
+Only step 1 and (eventually) step 6 are wired into the Snakemake DAG today;
+steps 2-5 are manual/CLI-driven.
 
 ## Research Strategy
 

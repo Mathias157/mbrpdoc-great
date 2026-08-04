@@ -17,7 +17,7 @@ pixi install                  # installs dependencies
 pixi run snakemake --cores 4  # runs the pipeline, builds build/main.pdf
 ```
 
-`analysis/Balmorel` is a git submodule with its own nested submodule
+`scripts/Balmorel` is a git submodule with its own nested submodule
 (`base/data`). If you cloned without `--recurse-submodules`, run
 `git submodule update --init --recursive` before `pixi run snakemake`.
 
@@ -27,7 +27,8 @@ pixi run snakemake --cores 4  # runs the pipeline, builds build/main.pdf
 .
 ├── Snakefile + rules/           # Snakemake DAG
 ├── config/default.yaml          # Pipeline parameters
-├── analysis/                    # Analysis scripts + Balmorel submodule
+├── scripts/                     # GREAT-specific preprocessing + Balmorel submodule
+│   └── Balmorel/                # Balmorel model + its own analysis/plotting toolkit
 ├── report/                      # LaTeX report source
 ├── tests/                       # Pytest tests of pipeline outputs
 ├── data/                        # Raw input data (gitignored)

@@ -19,7 +19,7 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import matplotlib.pyplot as plt
-from analysis.utils import load_industry_production
+from scripts.utils import load_industry_production
 import pandas as pd
 import numpy as np
 import click
@@ -38,7 +38,7 @@ balmorel_colours["WOODWASTE"] = "#927b5d"
 
 
 def load_current_demand():
-    model = Balmorel("analysis/Balmorel", os.getenv("GAMS_SYSTEM_DIR"))
+    model = Balmorel("scripts/Balmorel", os.getenv("GAMS_SYSTEM_DIR"))
     model.load_incfiles("base")
 
     # Get commodity demands related to industry
@@ -115,7 +115,7 @@ def demand_scenarios():
         ax.set_xlabel("")
         ax.legend(loc="lower center", ncols=3, bbox_to_anchor=(0.5, 1))
         fig.savefig(
-            f"analysis/plots/balmorel_{names[i]}_industry.pdf",
+            f"scripts/plots/balmorel_{names[i]}_industry.pdf",
             bbox_inches="tight",
             transparent=True,
         )
@@ -159,7 +159,7 @@ def electrify_extent(scenario):
         loc="center", bbox_to_anchor=(1, 1.2), ncols=3, title="Fuel for Heat Demand"
     )
     fig.savefig(
-        "analysis/plots/balmorel_results_industry.pdf",
+        "scripts/plots/balmorel_results_industry.pdf",
         bbox_inches="tight",
         transparent=True,
     )

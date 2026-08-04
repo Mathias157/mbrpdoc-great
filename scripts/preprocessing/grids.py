@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import pandas as pd
 import numpy as np
 from pybalmorel import IncFile, Balmorel
-from analysis.utils.formats import tynd_to_balmorel
-from analysis.utils import load_excel_sheet
+from scripts.utils.formats import tynd_to_balmorel
+from scripts.utils import load_excel_sheet
 
 
 # ------------------------------- #
@@ -33,7 +33,7 @@ from analysis.utils import load_excel_sheet
 
 
 def load_possible_connections():
-    m = Balmorel("analysis/Balmorel", os.getenv("GAMS_SYSTEM_DIR"))
+    m = Balmorel("scripts/Balmorel", os.getenv("GAMS_SYSTEM_DIR"))
     m.load_incfiles("base")
     electricity_possible_connections = m.get_input("XINVCOST").pivot_table(
         index="IRRRE", columns="IRRRI", aggfunc="count", values="Value", fill_value=0
@@ -89,7 +89,7 @@ def electricity_transmission():
 
     # Load sheets and Balmorel input data
     df = load_excel_sheet(
-        "analysis/preprocessing/20231103-TYNDP2024-GRID.xlsx",
+        "scripts/preprocessing/20231103-TYNDP2024-GRID.xlsx",
         "BALMOREL_XTRANS_POT",
         0,
     )
@@ -217,7 +217,7 @@ def electricity_transmission():
             name=names[i],
             prefix=prefixes[i],
             suffix=suffixes[i],
-            path="analysis/Balmorel/base/data",
+            path="scripts/Balmorel/base/data",
         )
         temp = temp.astype(object)
         idx = temp < 1e-5
@@ -233,7 +233,7 @@ def hydrogen_transmission():
 
     # Load sheets and Balmorel input data
     df = load_excel_sheet(
-        "analysis/preprocessing/20231103-TYNDP2024-GRID.xlsx",
+        "scripts/preprocessing/20231103-TYNDP2024-GRID.xlsx",
         "BALMOREL_XH2TRANS_POT",
         0,
     )
@@ -341,7 +341,7 @@ def hydrogen_transmission():
         name="HYDROGEN_XH2MAXINV",
         prefix="TABLE XH2MAXINV(IRRRE,IRRRI)   'Max investment in hydrogen transmission capacity between two regions for each simulated year(each 5th year)'\n$ifi not %tyndp2039%==yes  $goto unconstrained\n",
         suffix="\n$label unconstrained\n;\n* Ensure symmetry\nXH2MAXINV(IRRRE,IRRRI)=MAX(XH2MAXINV(IRRRI,IRRRE),XH2MAXINV(IRRRE,IRRRI));\n$ifi %tyndp2039%==yes XH2MAXINV(IRRRE,IRRRI)$(XH2MAXINV(IRRRE,IRRRI) EQ 0 and (XH2KFX('2050',IRRRE,IRRRI) or XH2INVCOST('2050', IRRRE,IRRRI)))=XH2KFX('2050',IRRRE,IRRRI) + EPS;",
-        path="analysis/Balmorel/base/data",
+        path="scripts/Balmorel/base/data",
     )
     df = df.astype(object)
     idx = df < 1e-5

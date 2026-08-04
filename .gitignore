@@ -63,5 +63,5 @@ Thumbs.db
 # Ignore data - will download or force commit
 data/
 
-analysis/plots/
+scripts/plots/
 report/figures

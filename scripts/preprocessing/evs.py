@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from analysis.utils import setup_plot
+from scripts.utils import setup_plot
 import numpy as np
 import click
 
@@ -68,7 +68,7 @@ def main(dark):
     ax2.set_ylim([0, 250])
     ax2.set_xlim([2025, 2050])
     fig.savefig(
-        "analysis/plots/ev_scenarios.pdf",
+        "scripts/plots/ev_scenarios.pdf",
         bbox_inches="tight",
         transparent=True,
     )

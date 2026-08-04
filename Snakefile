@@ -29,30 +29,30 @@ rule preprocessing:
         tyndp=rules.validate_tyndp2024.output,
         af25=rules.download_af25.output,
         script=[
-            "analysis/preprocessing/datacentres.py",
-            "analysis/preprocessing/grids.py"
+            "scripts/preprocessing/datacentres.py",
+            "scripts/preprocessing/grids.py"
         ]
     output:
-        "analysis/Balmorel/base/data/DE_DATACENTER.inc",
-        "analysis/Balmorel/base/data/XMAXINV.inc",
-        "analysis/Balmorel/base/data/XKFX.inc",
-        "analysis/Balmorel/base/data/HYDROGEN_XH2MAXINV.inc"
+        "scripts/Balmorel/base/data/DE_DATACENTER.inc",
+        "scripts/Balmorel/base/data/XMAXINV.inc",
+        "scripts/Balmorel/base/data/XKFX.inc",
+        "scripts/Balmorel/base/data/HYDROGEN_XH2MAXINV.inc"
     shell:
         """
-        python analysis/preprocessing/datacentres.py datacenterload
-        python analysis/preprocessing/grids.py electricity-transmission
-        python analysis/preprocessing/grids.py hydrogen-transmission
+        python scripts/preprocessing/datacentres.py datacenterload
+        python scripts/preprocessing/grids.py electricity-transmission
+        python scripts/preprocessing/grids.py hydrogen-transmission
         """
 
 rule run:
     message: "Runs the demo model."
     input:
-        "analysis/Balmorel/base/data/DE_DATACENTER.inc"
+        "scripts/Balmorel/base/data/DE_DATACENTER.inc"
     params:
         slope=config["slope"],
         x0=config["x0"],
     output: "build/results.pickle"
-    script: "analysis/model.py"
+    script: "scripts/model.py"
 
 
 rule plot:
@@ -63,15 +63,15 @@ rule plot:
         dark_plots=config["dark_plots"],
         dark_colourmap=config["dark_colourmap"],
         white_colourmap=config["white_colourmap"]
-    output: "build/plot.pdf"
-    script: "analysis/vis.py"
+    output: "build/generation_capacity.pdf"
+    shell: "pixi run analyse cap && cp scripts/Balmorel/analysis/plots/generation_capacity.pdf build/"
 
 
 rule copy_figures:
     message: "Copy figures to report directory."
     input: "build/test.success"
     params:
-        plot_path="analysis/plots",
+        plot_path="scripts/plots",
         build_path="build",
         output_path="report/figures",
     output:

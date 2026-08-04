@@ -22,16 +22,16 @@ import numpy as np
 from pybalmorel import Balmorel, IncFile
 from pybalmorel.formatting import balmorel_colours
 
-from analysis.utils import load_industry_production
+from scripts.utils import load_industry_production
 
 balmorel_colours["WOODPELLETS"] = "#3f7fa3"
 balmorel_colours["WOODWASTE"] = "#927b5d"
 
 model = Balmorel(
-    "analysis/Balmorel", gams_system_directory=os.getenv("GAMS_SYSTEM_DIR")
+    "scripts/Balmorel", gams_system_directory=os.getenv("GAMS_SYSTEM_DIR")
 )
-path = Path("analysis/Balmorel/tests/model")
-data_path = Path("analysis/Balmorel/tests/data")
+path = Path("scripts/Balmorel/tests/model")
+data_path = Path("scripts/Balmorel/tests/data")
 files = [Path("cplex.op4"), Path("Balmorel.gms")]
 if not path.exists():
     path.mkdir(parents=True)
@@ -39,7 +39,7 @@ if not data_path.exists():
     data_path.mkdir()
 for file in files:
     if not file.exists():
-        shutil.copy(f"analysis/Balmorel/base/model/{file}", f"{path}/{file}")
+        shutil.copy(f"scripts/Balmorel/base/model/{file}", f"{path}/{file}")
 
 # Set temporal resolution
 IncFile(
@@ -84,22 +84,22 @@ def test_transmaxinv(balmorel_already_run: bool = True):
     fig, _ = model.results.plot_map(
         "unconstrained", 2050, "Electricity", lines="Capacity", exo_end="Exogenous"
     )
-    fig.savefig("analysis/plots/tests/trans_exogenous_el.pdf")
+    fig.savefig("scripts/plots/tests/trans_exogenous_el.pdf")
     fig, _ = model.results.plot_map(
         "unconstrained",
         2050,
         "Electricity",
         lines="Capacity",
     )
-    fig.savefig("analysis/plots/tests/trans_unconstrained_el.pdf")
+    fig.savefig("scripts/plots/tests/trans_unconstrained_el.pdf")
     fig, _ = model.results.plot_map("unconstrained", 2050, "Hydrogen", lines="Capacity")
-    fig.savefig("analysis/plots/tests/trans_unconstrained_h2.pdf")
+    fig.savefig("scripts/plots/tests/trans_unconstrained_h2.pdf")
     fig, _ = model.results.plot_map(
         "constrained", 2050, "Electricity", lines="Capacity"
     )
-    fig.savefig("analysis/plots/tests/trans_constrained_el.pdf")
+    fig.savefig("scripts/plots/tests/trans_constrained_el.pdf")
     fig, _ = model.results.plot_map("constrained", 2050, "Hydrogen", lines="Capacity")
-    fig.savefig("analysis/plots/tests/trans_constrained_h2.pdf")
+    fig.savefig("scripts/plots/tests/trans_constrained_h2.pdf")
 
 
 def test_industry_scenario(balmorel_already_run: bool = True):
@@ -161,7 +161,7 @@ def test_industry_scenario(balmorel_already_run: bool = True):
             title="Fuel for Heat Demand",
         )
     fig.savefig(
-        "analysis/plots/tests/balmorel_results_industry.pdf",
+        "scripts/plots/tests/balmorel_results_industry.pdf",
         bbox_inches="tight",
         transparent=True,
     )

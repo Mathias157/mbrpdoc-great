@@ -38,7 +38,7 @@ def load_industry_production(scenario, scenario_folder: str = "base"):
     """Excluding electricity production"""
     results = MainResults(
         "MainResults_%s.gdx" % scenario,
-        paths=f"analysis/Balmorel/{scenario_folder}/model",
+        paths=f"scripts/Balmorel/{scenario_folder}/model",
         system_directory=os.getenv("GAMS_SYSTEM_DIR"),
     )
     df = results.get_result("PRO_YCRAGF").query(
