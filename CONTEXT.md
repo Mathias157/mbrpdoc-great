@@ -16,7 +16,7 @@ _Avoid_: Rolling horizon run (fine in prose, but "Rolling run" is the pipeline's
 The MIP solve that determines capacity investment decisions across all modelled years. Runs before any fullyear/rolling run for a scenario, and its results seed them.
 
 **Wall-time**:
-The LSF scheduler's hard job-duration limit (`#BSUB -W`). Exceeding it gets the job SIGKILLed immediately — no chance for GAMS or CPLEX to write a savepoint, close logs, or exit in a controlled way. Distinct from **RESLIM**, GAMS/CPLEX's own internal solver time limit, which today (1,209,600s ≈ 14 days) is set far longer than any job's wall-time and so never actually triggers.
+The scheduler's hard job-duration limit — `#BSUB -W` on the LSF cluster, `#SBATCH --time` on the SLURM cluster (see [0002](docs/adr/0002-slurm-migration.md)). Exceeding it gets the job SIGKILLed immediately — no chance for GAMS or CPLEX to write a savepoint, close logs, or exit in a controlled way. Distinct from **RESLIM**, GAMS/CPLEX's own internal solver time limit: most jobs leave it at its shared default (far longer than any job's wall-time, so it never triggers), but the rolling 2050 jobs (both clusters) and the fullyear 2050 jobs' ALLN/VGN warm-start path override it to sit just below that cluster's wall-time, so CPLEX yields control before the scheduler kills the job outright.
 _Avoid_: Timeout (ambiguous between the two)
 
 **Graceful stop**:
