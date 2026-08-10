@@ -63,6 +63,11 @@ args = ["scenario", {arg="suffix", default="*"}]
 cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/{{ scenario }}/model/MainResults{{ suffix }}.gdx' scripts/Balmorel/{{ scenario }}/model/"
 description = "Get MainResults from a scenario folder (first arg) with a certain suffix (second arg, defaults to *)"
 
+[tasks.sophia-sync-mainresults]
+args = ["scenario", {arg="suffix", default="*"}]
+cmd = "rsync -avzu 'mberos@sophia.dtu.dk:/home/mberos/Repos/GREAT/{{ scenario }}/model/MainResults{{ suffix }}.gdx' scripts/Balmorel/{{ scenario }}/model/"
+description = "Get MainResults from a scenario folder (first arg) with a certain suffix (second arg, defaults to *)"
+
 [pypi-dependencies]
 pybalmorel = ">=1.1.9, <2"
 python-decouple = ">=3.8, <4"
