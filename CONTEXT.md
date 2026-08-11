@@ -34,3 +34,9 @@ A High/Low label per country per scenario name: High if that country's total dem
 
 **VRE category**:
 A High Wind / High Solar / High Wind+Solar / Low VRE label per country per scenario name, based on whether that country's wind and/or solar production-to-demand ratio exceeds the mean of that ratio across all countries in the same scenario name.
+
+**Combined category**:
+The `{Demand category} Demand / {VRE category}` label per country per scenario name (e.g. "High Demand / High Wind") — the join of Demand category and VRE category, and the level at which cross-scenario comparisons (e.g. cost aggregation) group countries.
+
+**Reference scenario**:
+The single scenario name (default `base_R2050`) whose Combined category assignment is treated as authoritative and reused for every other scenario in a cross-scenario comparison, instead of recomputing Combined category per scenario. Needed because Combined category is mean-relative and can drift between scenarios as dispatch shifts — see [0004](docs/adr/0004-fixed-category-membership-for-cost-aggregation.md).

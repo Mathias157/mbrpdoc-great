@@ -6,8 +6,8 @@ High/Low and VRE type as High Wind / High Solar / High Wind+Solar / Low VRE,
 by comparing that country against the mean of all countries within the same
 scenario name. See CONTEXT.md ("Scenario name", "Demand category", "VRE
 category") for the precise definitions, and docs/adr/0003 for why this
-script lives in top-level scripts/ and is driven by postprocess.smk rather
-than the main DAG.
+script lives in top-level scripts/ (in scripts/postprocessing/) and is
+driven by postprocess.smk rather than the main DAG.
 
 Created on 11.08.2026
 @author: Mathias Berg Rosendal
@@ -23,7 +23,7 @@ from importlib import resources
 from pathlib import Path
 
 # Add repo root to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import click
 import geopandas as gpd

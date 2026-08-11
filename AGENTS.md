@@ -12,6 +12,8 @@ project is; this file is the operational protocol.
 ├── config/default.yaml         # Pipeline parameters
 ├── profiles/default/           # Snakemake profile
 ├── scripts/                    # GREAT-specific preprocessing scripts (feed Balmorel inputs)
+│   ├── postprocessing/         # GREAT-specific scripts that read Balmorel results
+│   │                           #  instead (see "Two Different Toolkits" below)
 │   └── Balmorel/               # Git submodule (Mathias157/Balmorel) — has its own
 │                                #  nested submodule at base/data, and its own
 │                                #  analysis/ toolkit (see below)
@@ -77,10 +79,13 @@ outside GREAT.
 
 One exception: `postprocess.smk` (a separate Snakemake flow, kept out of the
 main DAG/CI — see [ADR 0003](docs/adr/0003-postprocessing-snakemake-flow.md))
-drives a categorization script that lives here in top-level `scripts/` even
-though it *reads* Balmorel results rather than writing inputs — its
-Demand/VRE-type labeling logic is GREAT-specific research, not
-general-purpose Balmorel tooling.
+drives `scripts/postprocessing/` scripts that live here in top-level
+`scripts/` even though they *read* Balmorel results rather than writing
+inputs — `categorize_countries.py` (Demand/VRE-type labeling) and
+`aggregate_category_costs.py` (system cost per category across scenarios,
+category membership fixed from a reference scenario — see
+[ADR 0004](docs/adr/0004-fixed-category-membership-for-cost-aggregation.md))
+are both GREAT-specific research, not general-purpose Balmorel tooling.
 
 **`scripts/Balmorel/analysis/` (inside the submodule, NOT in the DAG).** The
 general-purpose Balmorel plotting/analysis toolkit, deliberately kept inside
@@ -100,6 +105,10 @@ results, independent of Snakemake:
   re-reading large GDX files).
 - `functions/formats.py`, `functions/pit_storage.py` — shared formatting
   helpers and storage-profile extraction.
+- `functions/costs.py` — `combine_capex_opex`, splicing each scenario's
+  investment-run capex with its rolling-run opex into one system-cost
+  breakdown. Used by `analyse.py`'s `combined-costs` command and by GREAT's
+  `scripts/postprocessing/aggregate_category_costs.py`.
 - `specific/` — one-off analyses that don't belong in the general CLI. If a
   GREAT-only analysis grows out of `specific/`, it likely belongs in this
   repo's `scripts/` instead, not the submodule — keep project-specific code

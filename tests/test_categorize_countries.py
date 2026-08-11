@@ -13,7 +13,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.categorize_countries import (  # noqa: E402
+from scripts.postprocessing.categorize_countries import (  # noqa: E402
     categorize_scenario,
     select_scenario_names,
 )
