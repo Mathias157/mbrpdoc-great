@@ -24,3 +24,13 @@ CPLEX voluntarily ending a solve (by hitting its own RESLIM, set below wall-time
 
 **Warm start**:
 Resuming a solve from a previous attempt's solution point (levels and basis) instead of starting cold. Only meaningful for simplex-family LP methods — CPLEX's barrier method (the model's current default) does not produce a basis a later solve can resume from.
+
+**Scenario name**:
+The single, atomic identifier of one specific `MainResults*.gdx` file — pybalmorel's own `scenario_name`, taken whole (e.g. `EVN_R2050`), never decomposed into folder/run-type/year parts. One scenario folder can hold several scenario names (different run types, target years, and — eventually — weather years, e.g. `EVN_WY2001_R2050`); whatever it encodes, it's handled as one opaque string.
+_Avoid_: Result, run (for this level — "Scenario" alone always means the folder)
+
+**Demand category**:
+A High/Low label per country per scenario name: High if that country's total demand (electricity + heat + hydrogen, summed in TWh) exceeds the mean total demand across all countries in that same scenario name, Low otherwise.
+
+**VRE category**:
+A High Wind / High Solar / High Wind+Solar / Low VRE label per country per scenario name, based on whether that country's wind and/or solar production-to-demand ratio exceeds the mean of that ratio across all countries in the same scenario name.

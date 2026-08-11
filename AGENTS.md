@@ -38,6 +38,12 @@ git submodule update --init --recursive
 Uninitialized submodules look like empty directories — don't assume the code
 or data is missing before checking this.
 
+**Pixi environment.** All dependencies (including `pybalmorel`) live in the
+pixi env, not system Python. Any ad-hoc Python invocation — not just the
+named `pixi run` tasks below — must go through `pixi run python ...` (or
+`pixi shell` first); a bare `python`/`python3` will fail to import project
+dependencies.
+
 ## Snakemake Discipline
 
 The DAG runs data → preprocessing → analysis → LaTeX report → tests:
@@ -68,6 +74,13 @@ that turns raw data into Balmorel inputs —
 `scripts/Balmorel/base/data/`. Runs via `pixi run snakemake`, per the
 "Snakemake Discipline" section above. This code is not meant to be reused
 outside GREAT.
+
+One exception: `postprocess.smk` (a separate Snakemake flow, kept out of the
+main DAG/CI — see [ADR 0003](docs/adr/0003-postprocessing-snakemake-flow.md))
+drives a categorization script that lives here in top-level `scripts/` even
+though it *reads* Balmorel results rather than writing inputs — its
+Demand/VRE-type labeling logic is GREAT-specific research, not
+general-purpose Balmorel tooling.
 
 **`scripts/Balmorel/analysis/` (inside the submodule, NOT in the DAG).** The
 general-purpose Balmorel plotting/analysis toolkit, deliberately kept inside

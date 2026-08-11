@@ -46,6 +46,7 @@ LOCAL_BALMOREL_DIR = "scripts/Balmorel"
 [tasks]
 run = "snakemake --cores 4"
 test = "snakemake test --cores 4"
+postprocess = "snakemake --snakefile rules/postprocess.smk --cores 4"
 dag = "snakemake dag --cores 1"
 clean = "snakemake clean"
 "clean-all" = "snakemake clean && rm -rf build/"
