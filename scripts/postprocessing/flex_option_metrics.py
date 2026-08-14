@@ -379,6 +379,24 @@ def plot_flex_vs_metrics(
     plt.close(fig)
 
 
+def plot_all(tidy: pd.DataFrame, plots_dir: Path) -> None:
+    """One PNG per (flex_option, metric_type, group) in `tidy`."""
+    for (flex_option, metric_type, group), rows in tidy.groupby([
+        "flex_option",
+        "metric_type",
+        "group",
+    ]):
+        safe_group = str(group).replace(" ", "-").replace("/", "-")
+        plot_flex_vs_metrics(
+            rows,
+            flex_option,
+            metric_type,
+            group,
+            plots_dir
+            / f"{flex_option.replace(' ', '-')}__{metric_type}__{safe_group}.png",
+        )
+
+
 # ------------------------------- #
 #            2. Main              #
 # ------------------------------- #
@@ -427,6 +445,12 @@ def plot_flex_vs_metrics(
     default=(),
     help="Restrict to these target year(s) (e.g. 2050). Default: all found.",
 )
+@click.option(
+    "--plots-only",
+    is_flag=True,
+    default=False,
+    help="Skip GDX/model loading entirely and just re-plot flex_plots/ from an existing flex_option_metrics.csv in --output-dir.",
+)
 def main(
     balmorel_path: str,
     gams_sysdir: str,
@@ -435,6 +459,7 @@ def main(
     reference_scenario: str,
     scenarios: tuple,
     years: tuple,
+    plots_only: bool,
 ):
     output_path = Path(output_dir)
     plots_dir = output_path / "flex_plots"
@@ -453,6 +478,13 @@ def main(
         "lole_h",
         "ens_twh",
     ]
+
+    if plots_only:
+        if not table_path.exists():
+            print(f"{table_path} not found - run without --plots-only first to generate it.")
+            return
+        plot_all(pd.read_csv(table_path), plots_dir)
+        return
 
     categorization_path = (
         Path(categorization_csv)
@@ -519,20 +551,7 @@ def main(
         tidy = tidy[tidy["Year"].astype(str).isin([str(y) for y in years])]
     tidy.to_csv(table_path, index=False)
 
-    for (flex_option, metric_type, group), rows in tidy.groupby([
-        "flex_option",
-        "metric_type",
-        "group",
-    ]):
-        safe_group = str(group).replace(" ", "-").replace("/", "-")
-        plot_flex_vs_metrics(
-            rows,
-            flex_option,
-            metric_type,
-            group,
-            plots_dir
-            / f"{flex_option.replace(' ', '-')}__{metric_type}__{safe_group}.png",
-        )
+    plot_all(tidy, plots_dir)
 
 
 if __name__ == "__main__":

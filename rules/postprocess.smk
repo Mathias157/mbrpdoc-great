@@ -14,6 +14,7 @@ rule all:
         "build_postprocess/categorization.csv",
         "build_postprocess/category_costs.csv",
         "build_postprocess/flex_option_metrics.csv",
+        "build_postprocess/flexibility_needs.csv",
 
 rule categorize_countries:
     message: "Categorize Balmorel scenario results by Demand/VRE type."
@@ -46,5 +47,17 @@ rule flex_option_metrics:
     output:
         table="build_postprocess/flex_option_metrics.csv",
         plots=directory("build_postprocess/flex_plots"),
+    shell:
+        "python {input.script} --output-dir build_postprocess"
+
+rule estimate_flexibility_needs:
+    message: "Estimate Daily/Weekly/Annual flexibility needs from residual load, across scenarios."
+    input:
+        results=glob("scripts/Balmorel/*/model/MainResults_*_R20*.gdx"),
+        categorization="build_postprocess/categorization.csv",
+        script="scripts/postprocessing/estimate_flexibility_needs.py",
+    output:
+        table="build_postprocess/flexibility_needs.csv",
+        plots=directory("build_postprocess/flex_needs_plots"),
     shell:
         "python {input.script} --output-dir build_postprocess"

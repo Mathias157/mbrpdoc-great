@@ -43,3 +43,16 @@ A technology or mechanism whose capacity and/or dispatch can absorb, shift, or s
 
 **Reference scenario**:
 The single scenario name (default `base_R2050`) whose Combined category assignment is treated as authoritative and reused for every other scenario in a cross-scenario comparison, instead of recomputing Combined category per scenario. Needed because Combined category is mean-relative and can drift between scenarios as dispatch shifts — see [0004](docs/adr/0004-fixed-category-membership-for-cost-aggregation.md).
+
+**Residual load**:
+Hourly non-dispatchable demand minus non-dispatchable supply, per Country/Combined category/system. The signal Daily/Weekly/Annual flexibility need is computed from.
+
+**Non-dispatchable demand**:
+`EL_DEMAND_YCRST` summed over a configurable set of demand categories via `--demand-categories` (default: `EXOGENOUS` only — inelastic household/industry/agriculture/datacentre load). `ENDOGENOUS_ELECT2HEAT` (heat-pump/resistive-heater electricity use) and `ENDO_EV` (net G2V-minus-V2G EV charging) can be added in, since how inelastic they really are is a modelling judgement call rather than settled fact — see [0006](docs/adr/0006-residual-load-definition-for-flexibility-needs.md). Always excludes storage charging (`ENDO_INTRASTO`/`ENDO_INTERSTO`) and distribution losses (`DIST_LOSSES`), which are dispatchable or technical rather than inelastic.
+
+**Non-dispatchable supply**:
+Wind, solar and run-of-river hydro production (fixed, not configurable) — the same "full-certainty" VRE grouping this Balmorel dataset already uses internally (`VRE_CERT_AS.inc`).
+
+**Flexibility need (Daily / Weekly / Annual)**:
+Per Geis et al. (2026) — the TWh/a of residual load that must be shifted in time to remove variability at that timescale. Computed as half the summed absolute deviation between one resolution's mean and the next coarser one, chained hourly→daily→weekly→annual so no variability is double-counted across scales.
+_Avoid_: Flexibility requirement, storage need (these conflate the need with any one option that could meet it)
