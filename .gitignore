@@ -2,6 +2,7 @@
 build/
 archive/
 .worktrees/
+.claude
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
