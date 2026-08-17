@@ -9,6 +9,11 @@ flexibility-need numbers (TWh/a) - system-wide, per Demand/VRE Combined
 category (membership fixed from a reference scenario, see docs/adr/0004),
 and per country.
 
+The same hierarchical decomposition is also applied to each hourly-capable
+flexibility option's (see flex_option_metrics.FLEX_OPTIONS) own dispatch, to
+show what timescale it actually operates at, alongside residual load's own
+Daily/Weekly/Annual bars (see docs/adr/0007).
+
 Created on 14.08.2026
 @author: Mathias Berg Rosendal
          PostDoc at DTU Management (Energy Economics & Modelling)
@@ -20,8 +25,11 @@ Created on 14.08.2026
 import sys
 from pathlib import Path
 
-# Add repo root to path for imports
+# Add repo root (for scripts.postprocessing.*) and the Balmorel submodule's
+# analysis/ dir (for functions.backup_production - see AGENTS.md's note on
+# how `pixi run analyse` invokes analyse.py) to path for imports.
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "Balmorel" / "analysis"))
 
 import click
 import matplotlib.pyplot as plt
@@ -30,13 +38,17 @@ import pandas as pd
 from decouple import config
 from pybalmorel import Balmorel
 
+from functions import backup_production
+
 from scripts.postprocessing.aggregate_category_costs import build_reference_category_map
 from scripts.postprocessing.categorize_countries import (
     SOLAR_TECHNOLOGIES,
     WIND_TECHNOLOGIES,
+    region_to_country_map,
     scenario_target_year,
     select_scenario_names,
 )
+from scripts.postprocessing.flex_option_metrics import FLEX_OPTIONS
 
 # ------------------------------- #
 #          1. Functions           #
@@ -52,7 +64,37 @@ NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [*WIND_TECHNOLOGIES, *SOLAR_TECHNOLOGIES,
 # default and ENDOGENOUS_ELECT2HEAT/ENDO_EV are opt-in via --demand-categories.
 DEMAND_CATEGORY_CHOICES = ["EXOGENOUS", "ENDOGENOUS_ELECT2HEAT", "ENDO_EV"]
 
-NEEDS_COLUMNS = ["Scenario", "Year", "group_type", "group", "timescale", "flex_need_twh"]
+NEEDS_COLUMNS = ["Scenario", "Year", "group_type", "group", "flex_option", "timescale", "flex_need_twh"]
+
+# Flex options (see flex_option_metrics.FLEX_OPTIONS) whose own MainResults
+# symbol carries an hourly Season/Time dimension - technology options read
+# PRO_YCRAGFST (already loaded below), transmission options read their own
+# *_FLOW_YCRST symbol, and peaker is derived from PRO_YCRAGFST the same way
+# flex_option_metrics.py does. V2G ("region_symbol", V2G_FLEX_YCR) and
+# Demand response ("system_only", DR_FLEX_Y) have no "ST" suffix - this
+# dataset's own naming convention for "already summed over Season/Time" (see
+# pybalmorel's formatting.py) - so they can't be decomposed this way and are
+# excluded here (see docs/adr/0007).
+HOURLY_FLEX_OPTIONS = {
+    name: spec for name, spec in FLEX_OPTIONS.items() if spec["kind"] in ("technology", "transmission", "peaker")
+}
+
+
+def _get_result_cached(res, symbol: str, cache_dir: Path, overwrite: bool) -> pd.DataFrame:
+    """`res.get_result(symbol)`, pickle-cached to `cache_dir/<symbol>.pkl`.
+    PRO_YCRAGFST in particular is a large hourly GDX read reused by every
+    technology/peaker flex option below, so re-running this script (e.g. to
+    tweak a plot) doesn't re-read it from disk every time. Mirrors
+    scripts/Balmorel/analysis/analyse.py's module-level `collect_results`
+    pickle cache, but self-contained (no click context) and living under
+    the (already gitignored) --output-dir."""
+    cache_path = cache_dir / f"{symbol}.pkl"
+    if cache_path.exists() and not overwrite:
+        return pd.read_pickle(cache_path)
+    df = res.get_result(symbol)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    df.to_pickle(cache_path)
+    return df
 
 
 def country_hourly_demand(el: pd.DataFrame, demand_categories: tuple, scenario_name: str, year: str) -> pd.DataFrame:
@@ -108,7 +150,9 @@ def flexibility_needs(hourly: pd.DataFrame) -> dict:
     }
 
 
-def _needs_rows(hourly: pd.DataFrame, scenario_name: str, year: str, group_type: str, group: str) -> pd.DataFrame:
+def _needs_rows(
+    hourly: pd.DataFrame, scenario_name: str, year: str, group_type: str, group: str, flex_option: str = ""
+) -> pd.DataFrame:
     if hourly.empty:
         return pd.DataFrame(columns=NEEDS_COLUMNS)
     needs = flexibility_needs(hourly)
@@ -118,6 +162,7 @@ def _needs_rows(hourly: pd.DataFrame, scenario_name: str, year: str, group_type:
             "Year": year,
             "group_type": group_type,
             "group": group,
+            "flex_option": flex_option,
             "timescale": list(needs.keys()),
             "flex_need_twh": list(needs.values()),
         }
@@ -153,12 +198,77 @@ def build_country_table(rl: pd.DataFrame, scenario_name: str, year: str) -> pd.D
     return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
 
 
-def plot_flexibility_needs(rows: pd.DataFrame, group_type: str, output_path: Path) -> None:
+def flex_option_hourly_use(
+    spec: dict,
+    pro: pd.DataFrame,
+    x_flow: pd.DataFrame,
+    xh2_flow: pd.DataFrame,
+    region_to_country: dict,
+    scenario_name: str,
+    year: str,
+) -> pd.DataFrame:
+    """(Country, Season, Time, Value): one flex option's own hourly
+    use/dispatch, summed to country level - the same shape as
+    `country_hourly_supply`'s output, so `flexibility_needs()` decomposes it
+    the same hierarchical way as residual load, to show what timescale that
+    option actually operates at. Only called for `HOURLY_FLEX_OPTIONS`."""
+    query = "Scenario == @scenario_name and Year == @year"
+
+    if spec["kind"] == "technology":
+        df = pro.query(query + " and Technology in @spec['technologies']")
+        return df.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+
+    if spec["kind"] == "transmission":
+        flow = x_flow if spec["use_symbol"] == "X_FLOW_YCR" else xh2_flow
+        df = flow.query(query)
+        # abs(): a directional flow can be negative depending on this
+        # symbol's From/To sign convention - "use" here means how much the
+        # interconnector is utilised, not net export/import direction.
+        return df.assign(Value=df["Value"].abs()).groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+
+    if spec["kind"] == "peaker":
+        backup = backup_production(pro.query(query), commodity="ELECTRICITY")
+        df = backup.assign(Country=backup["Region"].map(region_to_country)).dropna(subset=["Country"])
+        return df.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+
+    raise ValueError(f"{spec['kind']!r} has no hourly resolution for flexibility-need decomposition")
+
+
+def build_flex_option_system_table(
+    hourly_use: pd.DataFrame, flex_option: str, scenario_name: str, year: str
+) -> pd.DataFrame:
+    """Daily/Weekly/Annual decomposition of one flex option's own hourly use,
+    summed across every country - system-wide equivalent of `build_system_table`,
+    but the signal is the option's own operation, not residual load."""
+    hourly = hourly_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
+    return _needs_rows(hourly, scenario_name, year, group_type="flex_option_system", group="All", flex_option=flex_option)
+
+
+def build_flex_option_category_table(
+    hourly_use: pd.DataFrame, category_map: dict, flex_option: str, scenario_name: str, year: str
+) -> pd.DataFrame:
+    """Daily/Weekly/Annual decomposition of one flex option's own hourly use,
+    per Combined category - category-level equivalent of `build_category_table`."""
+    categorized = hourly_use.assign(combined_category=hourly_use["Country"].map(category_map)).dropna(
+        subset=["combined_category"]
+    )
+    tables = []
+    for group, group_use in categorized.groupby("combined_category"):
+        hourly = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
+        tables.append(
+            _needs_rows(hourly, scenario_name, year, group_type="flex_option_category", group=group, flex_option=flex_option)
+        )
+    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
+
+
+def plot_flexibility_needs(rows: pd.DataFrame, group_type: str, output_path: Path, hue_col: str = "group") -> None:
     """One figure, one panel per timescale: x-axis = scenario, one bar per
-    group (a single 'All' bar for system-level), height = flex_need_twh."""
+    `hue_col` value (a single 'All' bar for system-level), height =
+    flex_need_twh. `hue_col` defaults to "group" (spatial grouping: system/
+    category/country); pass "flex_option" to legend by flex option instead."""
     timescales = ["Daily", "Weekly", "Annual"]
     scenarios = sorted(rows["Scenario"].unique())
-    groups = sorted(rows["group"].unique())
+    groups = sorted(rows[hue_col].unique())
     x = np.arange(len(scenarios))
     width = 0.8 / max(len(groups), 1)
 
@@ -167,7 +277,7 @@ def plot_flexibility_needs(rows: pd.DataFrame, group_type: str, output_path: Pat
         sub = rows[rows["timescale"] == timescale]
         for i, group in enumerate(groups):
             heights = [
-                sub.loc[(sub["Scenario"] == sc) & (sub["group"] == group), "flex_need_twh"].sum()
+                sub.loc[(sub["Scenario"] == sc) & (sub[hue_col] == group), "flex_need_twh"].sum()
                 for sc in scenarios
             ]
             ax.bar(x + i * width, heights, width, label=group)
@@ -180,6 +290,46 @@ def plot_flexibility_needs(rows: pd.DataFrame, group_type: str, output_path: Pat
     by_label = dict(zip(labels, handles))
     fig.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.1, 0.5), loc="center left", fontsize=8)
     fig.suptitle(f"Flexibility needs ({group_type})")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_flex_option_category_grid(rows: pd.DataFrame, output_path: Path) -> None:
+    """Grid: one row per Combined category, one column per timescale; each
+    subplot bars scenario x flex option - the category-level counterpart to
+    `plot_flexibility_needs(..., hue_col="flex_option")`'s system-wide plot,
+    which can't itself carry a second (category) dimension."""
+    timescales = ["Daily", "Weekly", "Annual"]
+    categories = sorted(rows["group"].unique())
+    flex_options = sorted(rows["flex_option"].unique())
+    scenarios = sorted(rows["Scenario"].unique())
+    x = np.arange(len(scenarios))
+    width = 0.8 / max(len(flex_options), 1)
+
+    fig, axes = plt.subplots(len(categories), 3, figsize=(15, 4 * len(categories)), squeeze=False)
+    for row_i, category in enumerate(categories):
+        cat_rows = rows[rows["group"] == category]
+        for col_i, timescale in enumerate(timescales):
+            ax = axes[row_i][col_i]
+            sub = cat_rows[cat_rows["timescale"] == timescale]
+            for i, option in enumerate(flex_options):
+                heights = [
+                    sub.loc[(sub["Scenario"] == sc) & (sub["flex_option"] == option), "flex_need_twh"].sum()
+                    for sc in scenarios
+                ]
+                ax.bar(x + i * width, heights, width, label=option)
+            ax.set_xticks(x + width * (len(flex_options) - 1) / 2)
+            ax.set_xticklabels(scenarios, rotation=45, ha="right")
+            if row_i == 0:
+                ax.set_title(f"{timescale} flexibility need")
+            if col_i == 0:
+                ax.set_ylabel(f"{category}\nFlex need [TWh/a]")
+
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    fig.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.06, 0.5), loc="center left", fontsize=8)
+    fig.suptitle("Flexibility-option use, by Combined category")
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -234,6 +384,13 @@ def plot_flexibility_needs(rows: pd.DataFrame, group_type: str, output_path: Pat
     default=(),
     help="Restrict to these target year(s) (e.g. 2050). Default: all found.",
 )
+@click.option(
+    "--overwrite-cache",
+    is_flag=True,
+    default=False,
+    help="Re-read PRO_YCRAGFST/X_FLOW_YCRST/XH2_FLOW_YCRST from GDX instead of <output-dir>/.gdx_cache/*.pkl "
+    "(stale after new HPC results are synced down for the same scenario names).",
+)
 def main(
     balmorel_path: str,
     gams_sysdir: str,
@@ -242,11 +399,13 @@ def main(
     reference_scenario: str,
     demand_categories: tuple,
     years: tuple,
+    overwrite_cache: bool,
 ):
     output_path = Path(output_dir)
     plots_dir = output_path / "flex_needs_plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
     table_path = output_path / "flexibility_needs.csv"
+    cache_dir = output_path / ".gdx_cache"
 
     categorization_path = (
         Path(categorization_csv) if categorization_csv else output_path / "categorization.csv"
@@ -270,8 +429,11 @@ def main(
     model.collect_results(suffix_naming_only=True)
     res = model.results
 
-    el = res.get_result("EL_DEMAND_YCRST")
-    pro = res.get_result("PRO_YCRAGFST")
+    el = _get_result_cached(res, "EL_DEMAND_YCRST", cache_dir, overwrite_cache)
+    pro = _get_result_cached(res, "PRO_YCRAGFST", cache_dir, overwrite_cache)
+    x_flow = _get_result_cached(res, "X_FLOW_YCRST", cache_dir, overwrite_cache)
+    xh2_flow = _get_result_cached(res, "XH2_FLOW_YCRST", cache_dir, overwrite_cache)
+    region_to_country = region_to_country_map(pro)
 
     scenario_names = select_scenario_names(model.scenario_names)
     print(f"Estimating flexibility needs for {len(scenario_names)} fullyear/rolling scenario result(s): {scenario_names}")
@@ -292,6 +454,15 @@ def main(
         tables.append(build_category_table(rl, category_map, scenario_name, year))
         tables.append(build_country_table(rl, scenario_name, year))
 
+        for flex_option, spec in HOURLY_FLEX_OPTIONS.items():
+            hourly_use = flex_option_hourly_use(
+                spec, pro, x_flow, xh2_flow, region_to_country, scenario_name, year
+            )
+            if hourly_use.empty:
+                continue
+            tables.append(build_flex_option_system_table(hourly_use, flex_option, scenario_name, year))
+            tables.append(build_flex_option_category_table(hourly_use, category_map, flex_option, scenario_name, year))
+
     tidy = pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
     if years:
         tidy = tidy[tidy["Year"].astype(str).isin([str(y) for y in years])]
@@ -305,6 +476,19 @@ def main(
         if subset.empty:
             continue
         plot_flexibility_needs(subset, group_type, plots_dir / f"{group_type}.png")
+
+    option_system_rows = tidy[tidy["group_type"] == "flex_option_system"]
+    if not option_system_rows.empty:
+        plot_flexibility_needs(
+            option_system_rows,
+            "flexibility options, system-wide",
+            plots_dir / "system_by_option.png",
+            hue_col="flex_option",
+        )
+
+    option_category_rows = tidy[tidy["group_type"] == "flex_option_category"]
+    if not option_category_rows.empty:
+        plot_flex_option_category_grid(option_category_rows, plots_dir / "category_by_option.png")
 
 
 if __name__ == "__main__":

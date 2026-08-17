@@ -13,12 +13,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.postprocessing.estimate_flexibility_needs import (  # noqa: E402
+    HOURLY_FLEX_OPTIONS,
     build_category_table,
     build_country_table,
+    build_flex_option_category_table,
+    build_flex_option_system_table,
     build_system_table,
     country_hourly_demand,
     country_hourly_supply,
     country_residual_load,
+    flex_option_hourly_use,
     flexibility_needs,
 )
 
@@ -147,3 +151,112 @@ def test_build_country_table_keeps_countries_separate():
 
     assert set(result["group"]) == {"A", "B"}
     assert set(result["group_type"]) == {"country"}
+
+
+def test_hourly_flex_options_excludes_v2g_and_demand_response():
+    # Neither symbol carries Season/Time (see docs/adr/0007) - only
+    # technology/transmission/peaker kinds should survive the filter.
+    assert "V2G" not in HOURLY_FLEX_OPTIONS
+    assert "Demand response" not in HOURLY_FLEX_OPTIONS
+    assert "Heat pumps" in HOURLY_FLEX_OPTIONS
+    assert "Electricity transmission" in HOURLY_FLEX_OPTIONS
+    assert "Peaker" in HOURLY_FLEX_OPTIONS
+
+
+def test_flex_option_hourly_use_technology_filters_scenario_year_and_technology():
+    pro = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 3 + ["OTHER_R2050"],
+            "Year": ["2050"] * 3 + ["2050"],
+            "Country": ["A", "A", "A", "A"],
+            "Season": ["S01"] * 4,
+            "Time": ["T001"] * 4,
+            "Technology": ["ELECT-TO-HEAT", "ELECT-TO-HEAT", "CONDENSING", "ELECT-TO-HEAT"],
+            "Value": [10, 5, 100, 99],
+        }
+    )
+    spec = {"kind": "technology", "technologies": ["ELECT-TO-HEAT"]}
+
+    result = flex_option_hourly_use(spec, pro, pd.DataFrame(), pd.DataFrame(), {}, "TST_R2050", "2050")
+
+    assert result["Value"].sum() == 15
+
+
+def test_flex_option_hourly_use_transmission_takes_absolute_flow_and_filters_symbol():
+    x_flow = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050", "TST_R2050"],
+            "Year": ["2050", "2050"],
+            "Country": ["A", "A"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T002"],
+            "Value": [10, -4],
+        }
+    )
+    xh2_flow = pd.DataFrame(columns=x_flow.columns)
+    spec = {"kind": "transmission", "capacity_symbol": "X_CAP_YCR", "use_symbol": "X_FLOW_YCR"}
+
+    result = flex_option_hourly_use(spec, pd.DataFrame(), x_flow, xh2_flow, {}, "TST_R2050", "2050")
+
+    assert result["Value"].sum() == 14
+
+
+def test_flex_option_hourly_use_peaker_maps_region_to_country_and_filters_backup():
+    pro = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 2,
+            "Year": ["2050"] * 2,
+            "Region": ["R1", "R1"],
+            "Season": ["S01"] * 2,
+            "Time": ["T001"] * 2,
+            "Commodity": ["ELECTRICITY", "ELECTRICITY"],
+            "Generation": ["GNR_BACKUP_CONDENSING", "GNR_NORMAL_CONDENSING"],
+            "Value": [7, 100],
+        }
+    )
+    spec = {"kind": "peaker"}
+
+    result = flex_option_hourly_use(spec, pro, pd.DataFrame(), pd.DataFrame(), {"R1": "A"}, "TST_R2050", "2050")
+
+    assert result["Value"].sum() == 7
+    assert set(result["Country"]) == {"A"}
+
+
+def test_flex_option_hourly_use_rejects_non_hourly_kind():
+    with pytest.raises(ValueError):
+        flex_option_hourly_use({"kind": "region_symbol"}, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}, "TST_R2050", "2050")
+
+
+def test_build_flex_option_system_table_sums_across_countries():
+    hourly_use = pd.DataFrame(
+        {
+            "Country": ["A", "B"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T001"],
+            "Value": [3.0, 4.0],
+        }
+    )
+
+    result = build_flex_option_system_table(hourly_use, "Heat pumps", "TST_R2050", "2050")
+
+    assert set(result["group_type"]) == {"flex_option_system"}
+    assert set(result["group"]) == {"All"}
+    assert set(result["flex_option"]) == {"Heat pumps"}
+
+
+def test_build_flex_option_category_table_drops_countries_missing_from_category_map():
+    hourly_use = pd.DataFrame(
+        {
+            "Country": ["A", "B"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T001"],
+            "Value": [3.0, 4.0],
+        }
+    )
+    category_map = {"A": "High Demand / High Wind"}
+
+    result = build_flex_option_category_table(hourly_use, category_map, "Heat pumps", "TST_R2050", "2050")
+
+    assert set(result["group"]) == {"High Demand / High Wind"}
+    assert set(result["group_type"]) == {"flex_option_category"}
+    assert set(result["flex_option"]) == {"Heat pumps"}
