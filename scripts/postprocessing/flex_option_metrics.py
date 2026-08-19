@@ -1,13 +1,13 @@
 """
 Flexibility-Option Priority Scatter Plots
 
-For each flexibility option (heat pumps, storage, V2G, transmission, ...),
-plots its capacity or use (Y-axis) against system cost, emissions, and
-security of supply/LOLE (X-axis), one dot per (scenario, year), separately
-per Demand/VRE Combined category (default) or system-wide. See CONTEXT.md
-("Flexibility option") and docs/adr/0005 for the definitions this script
-implements, and the design record captured there for why V2G/demand
-response are handled differently from every other option.
+For each flexibility option (heat pumps, storage, thermal, ...) and each
+commodity it touches (electricity, heat, hydrogen), plots its capacity or
+(commodity-signed) use against system cost, emissions, and security of
+supply/LOLE, one dot per (scenario, year), one plot per commodity,
+separately per Demand/VRE Combined category (default) or system-wide. See
+CONTEXT.md ("Flexibility option", "Commodity-signed flex value") and
+docs/adr/0005, 0008, 0010 for the definitions this script implements.
 
 Does not itself rank flexibility options - it produces the plots and a
 tidy CSV (build_postprocess/flex_option_metrics.csv) meant to feed a later
@@ -52,61 +52,123 @@ from scripts.postprocessing.categorize_countries import (
 #          1. Functions           #
 # ------------------------------- #
 
-# Each option's metric_types lists which of "capacity"/"use" are valid to
-# request - most support both (see CONTEXT.md "Flexibility option"); V2G and
-# demand response are use-only, since their capacity is an exogenous model
-# assumption rather than an endogenously optimised decision.
+# Each commodity's own non-dispatchable-demand symbol (annual) - used both
+# to source storage's charging side and V2G's net G2V-minus-V2G side. See
+# CONTEXT.md's "Non-dispatchable demand"/"Non-dispatchable heat demand"/
+# "Non-dispatchable hydrogen demand" and docs/adr/0008.
+COMMODITY_DEMAND_SYMBOLS = {
+    "ELECTRICITY": "EL_DEMAND_YCR",
+    "HEAT": "H_DEMAND_YCRA",
+    "HYDROGEN": "H2_DEMAND_YCR",
+}
+
+# Category values, within a commodity's own demand symbol, that represent
+# that commodity's own storage charging - always excluded from residual
+# load (see docs/adr/0006, 0009) and, here, the source of storage's negative
+# "demand" (charging) row (see docs/adr/0008).
+STORAGE_CHARGE_CATEGORIES = ["ENDO_INTRASTO", "ENDO_INTERSTO"]
+
+# Which capacity/use metrics a flex-option-commodity view supports, driven
+# purely by "kind" (see docs/adr/0008): "production" and "storage" (its
+# discharge side) have a real nameplate capacity; "consumption" (heat
+# pump/electrolyser electricity draw) and storage's own charging side do
+# not - no symbol reports "how much of this commodity can this option
+# withdraw" - so capacity is never shown there (see CONTEXT.md's
+# "Flexibility option" entry).
+_METRIC_TYPES_BY_KIND = {
+    "production": ("capacity", "use"),
+    "consumption": ("use",),
+    "storage": ("capacity", "use"),
+    "transmission": ("capacity", "use"),
+    "net_category": ("use",),
+    "system_only": ("use",),
+    "peaker": ("capacity", "use"),
+}
+
+# FLEX_OPTIONS: {option name: {commodity: view spec}}. A single option can
+# have a view on more than one commodity (e.g. a heat pump withdraws
+# electricity and supplies heat) - each view is independent and produces its
+# own (possibly multi-directional, see "kind"="storage") rows. "kind"
+# determines both the extraction mechanism and the sign convention (see
+# CONTEXT.md's "Commodity-signed flex value" and docs/adr/0008, 0010):
+#   - "production": positive/supply-side technology output (PRO_YCRAGF /
+#     G_CAP_YCRAF, Commodity-filtered). Optional "fuels"/"exclude_fuels"
+#     (Fuel include/exclude list) and "exclude_backup" (drop rows whose
+#     Generation contains "BACKUP" - this dataset's peaker/backup
+#     convention, see docs/adr/0010).
+#   - "consumption": negative/demand-side electricity draw (F_CONS_YCRA,
+#     Fuel=ELECTRIC, Technology-filtered). No capacity.
+#   - "storage": both directions - positive "supply" (discharging, same as
+#     "production") and negative "demand" (charging, from that commodity's
+#     own COMMODITY_DEMAND_SYMBOLS entry, STORAGE_CHARGE_CATEGORIES).
+#     Capacity only on the "supply"/discharge side.
+#   - "transmission": unsigned magnitude (X_CAP_YCR/X_FLOW_YCR or
+#     XH2_CAP_YCR/XH2_FLOW_YCR) - unchanged from before this redesign; a
+#     directional flow's sign is a From/To convention, not a supply/demand
+#     one, so it's deliberately left out of scope here.
+#   - "net_category": one already-net-signed series from that commodity's
+#     own demand symbol (V2G's ENDO_EV = net G2V-minus-V2G) - negated once
+#     to flip from "demand-table" convention (positive = more demand) to
+#     this script's "positive = injects" convention.
+#   - "system_only": unsigned magnitude, no Country dimension
+#     (DR_FLEX_Y) - unchanged; no equivalent net-signed source exists.
+#   - "peaker": unsigned/positive backup production, per commodity (see
+#     docs/adr/0010) - electricity and heat only, no hydrogen backup exists
+#     in this model.
 FLEX_OPTIONS = {
-    "Electricity transmission": {
-        "kind": "transmission",
-        "capacity_symbol": "X_CAP_YCR",
-        "use_symbol": "X_FLOW_YCR",
-        "metric_types": ("capacity", "use"),
-    },
-    "Hydrogen transmission": {
-        "kind": "transmission",
-        "capacity_symbol": "XH2_CAP_YCR",
-        "use_symbol": "XH2_FLOW_YCR",
-        "metric_types": ("capacity", "use"),
-    },
     "Heat pumps": {
-        "kind": "technology",
-        "technologies": ["ELECT-TO-HEAT"],
-        "metric_types": ("capacity", "use"),
-    },
-    "Electricity storage": {
-        "kind": "technology",
-        "technologies": ["INTRASEASONAL-ELECT-STORAGE"],
-        "metric_types": ("capacity", "use"),
-    },
-    "Heat storage": {
-        "kind": "technology",
-        "technologies": ["INTERSEASONAL-HEAT-STORAGE", "INTRASEASONAL-HEAT-STORAGE"],
-        "metric_types": ("capacity", "use"),
-    },
-    "Hydrogen storage": {
-        "kind": "technology",
-        "technologies": ["H2-STORAGE"],
-        "metric_types": ("capacity", "use"),
+        "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECT-TO-HEAT"]},
+        "HEAT": {"kind": "production", "technologies": ["ELECT-TO-HEAT"]},
     },
     "Electrolysers": {
-        "kind": "technology",
-        "technologies": ["ELECTROLYZER"],
-        "metric_types": ("capacity", "use"),
+        "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECTROLYZER"]},
+        "HYDROGEN": {"kind": "production", "technologies": ["ELECTROLYZER"]},
+        "HEAT": {"kind": "production", "technologies": ["ELECTROLYZER"]},
+    },
+    "Electricity storage": {
+        "ELECTRICITY": {"kind": "storage", "technologies": ["INTRASEASONAL-ELECT-STORAGE"]},
+    },
+    "Heat storage": {
+        "HEAT": {"kind": "storage", "technologies": ["INTERSEASONAL-HEAT-STORAGE", "INTRASEASONAL-HEAT-STORAGE"]},
+    },
+    "Hydrogen storage": {
+        "HYDROGEN": {"kind": "storage", "technologies": ["H2-STORAGE"]},
+    },
+    "Electricity transmission": {
+        "ELECTRICITY": {"kind": "transmission", "capacity_symbol": "X_CAP_YCR", "use_symbol": "X_FLOW_YCR"},
+    },
+    "Hydrogen transmission": {
+        "HYDROGEN": {"kind": "transmission", "capacity_symbol": "XH2_CAP_YCR", "use_symbol": "XH2_FLOW_YCR"},
     },
     "V2G": {
-        "kind": "region_symbol",
-        "symbol": "V2G_FLEX_YCR",
-        "metric_types": ("use",),
+        "ELECTRICITY": {"kind": "net_category", "category": "ENDO_EV"},
     },
     "Demand response": {
-        "kind": "system_only",
-        "symbol": "DR_FLEX_Y",
-        "metric_types": ("use",),
+        "ELECTRICITY": {"kind": "system_only", "symbol": "DR_FLEX_Y"},
+    },
+    "Nuclear": {
+        "ELECTRICITY": {"kind": "production", "technologies": ["CONDENSING"], "fuels": ["NUCLEAR"], "exclude_backup": True},
+    },
+    "Thermal": {
+        "ELECTRICITY": {
+            "kind": "production",
+            "technologies": ["CONDENSING", "CHP-BACK-PRESSURE", "CHP-EXTRACTION"],
+            "exclude_fuels": ["NUCLEAR"],
+            "exclude_backup": True,
+        },
+        "HEAT": {
+            "kind": "production",
+            "technologies": ["CHP-BACK-PRESSURE", "CHP-EXTRACTION", "BOILERS"],
+            "exclude_backup": True,
+        },
+        "HYDROGEN": {"kind": "production", "technologies": ["STEAMREFORMING"]},
+    },
+    "Hydro reservoirs": {
+        "ELECTRICITY": {"kind": "production", "technologies": ["HYDRO-RESERVOIRS"]},
     },
     "Peaker": {
-        "kind": "peaker",
-        "metric_types": ("capacity", "use"),
+        "ELECTRICITY": {"kind": "peaker"},
+        "HEAT": {"kind": "peaker"},
     },
 }
 
@@ -121,89 +183,102 @@ def _year_col(df: pd.DataFrame) -> str:
     return "Year" if "Year" in df.columns else "Y"
 
 
-def _country_col(df: pd.DataFrame) -> str:
-    return "Country" if "Country" in df.columns else "RRR"
-
-
 def extract_flex_option_values(
-    model, region_to_country: dict, flex_option: str, metric_type: str
-) -> pd.DataFrame:
-    """(Scenario, Year, Country, Value) for every option except demand
-    response, which returns (Scenario, Year, Value) - it has no country
-    dimension in the model's own output (see CONTEXT.md)."""
-    spec = FLEX_OPTIONS[flex_option]
-    if metric_type not in spec["metric_types"]:
+    get_symbol, region_to_country: dict, flex_option: str, commodity: str, metric_type: str
+) -> list:
+    """[(direction, DataFrame)] for one (flex_option, commodity, metric_type)
+    - each DataFrame is (Scenario, Year, Country, Value), except demand
+    response ("system_only"), which has no country dimension (see
+    CONTEXT.md). Usually one pair; storage's "use" returns two - "demand"
+    (charging, from that commodity's own non-dispatchable-demand symbol) and
+    "supply" (discharging, from production) - since they come from two
+    different symbols and must never be summed together upstream (see
+    docs/adr/0008)."""
+    spec = FLEX_OPTIONS[flex_option][commodity]
+    kind = spec["kind"]
+    if metric_type not in _METRIC_TYPES_BY_KIND[kind]:
         raise ValueError(
-            f"{flex_option!r} has no {metric_type!r} metric - valid: {spec['metric_types']}"
+            f"{flex_option!r}/{commodity!r} has no {metric_type!r} metric - valid: {_METRIC_TYPES_BY_KIND[kind]}"
         )
 
-    res = model.results
+    def _technology_rows(symbol: str) -> pd.DataFrame:
+        df = get_symbol(symbol)
+        df = df[(df["Commodity"] == commodity) & (df["Technology"].isin(spec["technologies"]))]
+        if "fuels" in spec:
+            df = df[df["Fuel"].isin(spec["fuels"])]
+        if "exclude_fuels" in spec:
+            df = df[~df["Fuel"].isin(spec["exclude_fuels"])]
+        if spec.get("exclude_backup"):
+            df = df[~df["Generation"].str.contains("BACKUP")]
+        return df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
 
-    if spec["kind"] == "technology":
+    if kind == "production":
         symbol = "G_CAP_YCRAF" if metric_type == "capacity" else "PRO_YCRAGF"
-        df = res.get_result(symbol).query("Technology in @spec['technologies']")
-        return df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
+        return [("supply", _technology_rows(symbol))]
 
-    if spec["kind"] == "transmission":
-        symbol = (
-            spec["capacity_symbol"] if metric_type == "capacity" else spec["use_symbol"]
-        )
-        df = res.get_result(symbol)
-        return df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
+    if kind == "consumption":
+        df = get_symbol("F_CONS_YCRA")
+        df = df[(df["Technology"].isin(spec["technologies"])) & (df["Fuel"] == "ELECTRIC")]
+        rows = df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
+        rows["Value"] *= -1
+        return [("demand", rows)]
 
-    if spec["kind"] == "region_symbol":
-        # V2G_FLEX_YCR carries no Unit column (a raw domain-fallback
-        # symbol) - its physical unit isn't confirmed against a live GDX
-        # here, unlike every other symbol this script reads.
-        df = res.get_result(spec["symbol"])
-        df = df.assign(Country=df[_country_col(df)].map(region_to_country))
-        return (
-            df
-            .dropna(subset=["Country"])
-            .groupby(["Scenario", _year_col(df), "Country"])["Value"]
-            .sum()
-            .reset_index()
-            .rename(columns={_year_col(df): "Year"})
-        )
+    if kind == "storage":
+        if metric_type == "capacity":
+            return [("supply", _technology_rows("G_CAP_YCRAF"))]
+        discharge = _technology_rows("PRO_YCRAGF")
+        demand = get_symbol(COMMODITY_DEMAND_SYMBOLS[commodity])
+        demand = demand[demand["Category"].isin(STORAGE_CHARGE_CATEGORIES)]
+        charge = demand.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
+        charge["Value"] *= -1
+        return [("demand", charge), ("supply", discharge)]
 
-    if spec["kind"] == "system_only":
-        df = res.get_result(spec["symbol"])
-        return df.rename(columns={_year_col(df): "Year"})[["Scenario", "Year", "Value"]]
+    if kind == "transmission":
+        symbol = spec["capacity_symbol"] if metric_type == "capacity" else spec["use_symbol"]
+        df = get_symbol(symbol)
+        rows = df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
+        return [("unsigned", rows)]
 
-    if spec["kind"] == "peaker":
-        backup = backup_production(
-            res.get_result("PRO_YCRAGFST"), commodity="ELECTRICITY"
-        )
+    if kind == "net_category":
+        df = get_symbol(COMMODITY_DEMAND_SYMBOLS[commodity])
+        df = df[df["Category"] == spec["category"]]
+        rows = df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
+        rows["Value"] *= -1
+        return [("net", rows)]
+
+    if kind == "system_only":
+        df = get_symbol(spec["symbol"])
+        rows = df.rename(columns={_year_col(df): "Year"})[["Scenario", "Year", "Value"]]
+        return [("unsigned", rows)]
+
+    if kind == "peaker":
+        backup = backup_production(get_symbol("PRO_YCRAGFST"), commodity=commodity)
         if metric_type == "capacity":
             per_region = effective_backup_capacity(backup, nth_max=1)
         else:
-            per_region = (
-                backup
-                .groupby(["Scenario", "Year", "Region"])["Value"]
-                .sum()
-                .reset_index()
-            )
+            per_region = backup.groupby(["Scenario", "Year", "Region"])["Value"].sum().reset_index()
             per_region["Value"] = (
                 per_region["Value"] / 1e6
             )  # MWh -> TWh, matching PRO_YCRAGF/X_FLOW_YCR's own "use" unit
-        per_region = per_region.assign(
-            Country=per_region["Region"].map(region_to_country)
-        )
-        return (
-            per_region
-            .dropna(subset=["Country"])
+        per_region = per_region.assign(Country=per_region["Region"].map(region_to_country))
+        rows = (
+            per_region.dropna(subset=["Country"])
             .groupby(["Scenario", "Year", "Country"])["Value"]
             .sum()
             .reset_index()
         )
+        return [("supply", rows)]
 
-    raise ValueError(f"Unknown flex option kind: {spec['kind']!r}")
+    raise ValueError(f"Unknown flex option kind: {kind!r}")
 
 
 def extract_scenario_metrics(
-    model, region_to_country: dict, scenarios: list | tuple
+    model, get_symbol, region_to_country: dict, scenarios: list | tuple
 ) -> pd.DataFrame:
-    """(Scenario, Year, Country): cost_beur, emissions_kton, lole_h, ens_twh."""
+    """(Scenario, Year, Country): cost_beur, emissions_kton, lole_h, ens_twh.
+    System-wide (all commodities) for cost/emissions; electricity-only for
+    LOLE/ENS (see docs/adr/0005) - unchanged by the commodity-aware
+    redesign in docs/adr/0008."""
     res = model.results
 
     obj = res.get_result("OBJ_YCR")
@@ -241,7 +316,7 @@ def extract_scenario_metrics(
         .rename("emissions_kton")
     )
 
-    backup = backup_production(res.get_result("PRO_YCRAGFST"), commodity="ELECTRICITY")
+    backup = backup_production(get_symbol("PRO_YCRAGFST"), commodity="ELECTRICITY")
     lole_ens = compute_lole_ens(backup)
     lole_ens = lole_ens.assign(
         Country=lole_ens["Region"].map(region_to_country)
@@ -270,7 +345,9 @@ def build_category_table(
     scenario_metrics: pd.DataFrame,
     category_map: dict,
     flex_option: str,
+    commodity: str,
     metric_type: str,
+    direction: str,
 ) -> pd.DataFrame:
     """One row per (Scenario, Year, combined_category): flex_value summed
     (with cost/emissions/lole/ens) across that category's countries. Empty
@@ -297,7 +374,9 @@ def build_category_table(
         .rename(columns={"Value": "flex_value", "combined_category": "group"})
     )
     grouped["flex_option"] = flex_option
+    grouped["Commodity"] = commodity
     grouped["metric_type"] = metric_type
+    grouped["direction"] = direction
     grouped["group_type"] = "category"
     return grouped
 
@@ -306,7 +385,9 @@ def build_system_table(
     flex_values: pd.DataFrame,
     system_metrics: pd.DataFrame,
     flex_option: str,
+    commodity: str,
     metric_type: str,
+    direction: str,
 ) -> pd.DataFrame:
     """One row per (Scenario, Year): system-wide flex_value (summed across
     countries first, if any) against system-wide cost/emissions/lole/ens."""
@@ -322,7 +403,9 @@ def build_system_table(
     ).rename(columns={"Value": "flex_value"})
     grouped["group"] = "All"
     grouped["flex_option"] = flex_option
+    grouped["Commodity"] = commodity
     grouped["metric_type"] = metric_type
+    grouped["direction"] = direction
     grouped["group_type"] = "system"
     return grouped
 
@@ -330,12 +413,15 @@ def build_system_table(
 def plot_flex_vs_metrics(
     rows: pd.DataFrame,
     flex_option: str,
+    commodity: str,
     metric_type: str,
     group: str,
     output_path: Path,
 ) -> None:
     """One figure: cost/emissions/LOLE as three subplots, scenario -> colour,
-    year -> marker, a degree-1 fit line per subplot as a visual aid."""
+    year -> marker, a degree-1 fit line per subplot as a visual aid. Rows of
+    different "direction" (e.g. storage's charge/discharge) simply coexist
+    as differently-signed points - not separate plots."""
     metrics = [
         ("cost_beur", "System cost [B€]"),
         ("emissions_kton", "Emissions [kton]"),
@@ -361,8 +447,9 @@ def plot_flex_vs_metrics(
             fit = np.polyfit(rows[col], rows["flex_value"], 1)
             xs = np.linspace(rows[col].min(), rows[col].max(), 2)
             ax.plot(xs, np.polyval(fit, xs), color="grey", linestyle="--", linewidth=1)
+        ax.axhline(0, color="black", linewidth=0.5)
         ax.set_xlabel(label)
-        ax.set_ylabel(f"{flex_option} ({metric_type})")
+        ax.set_ylabel(f"{flex_option} ({commodity}, {metric_type})")
 
     handles, labels = axes[0].get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
@@ -373,16 +460,19 @@ def plot_flex_vs_metrics(
         loc="center left",
         fontsize=8,
     )
-    fig.suptitle(f"{flex_option} ({metric_type}) - {group}")
+    fig.suptitle(f"{flex_option} ({commodity}, {metric_type}) - {group}")
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
 def plot_all(tidy: pd.DataFrame, plots_dir: Path) -> None:
-    """One PNG per (flex_option, metric_type, group) in `tidy`."""
-    for (flex_option, metric_type, group), rows in tidy.groupby([
+    """One PNG per (flex_option, Commodity, metric_type, group) in `tidy` -
+    rows of different direction (e.g. storage charge/discharge) land in the
+    same plot as differently-signed points, not separate PNGs."""
+    for (flex_option, commodity, metric_type, group), rows in tidy.groupby([
         "flex_option",
+        "Commodity",
         "metric_type",
         "group",
     ]):
@@ -390,10 +480,11 @@ def plot_all(tidy: pd.DataFrame, plots_dir: Path) -> None:
         plot_flex_vs_metrics(
             rows,
             flex_option,
+            commodity,
             metric_type,
             group,
             plots_dir
-            / f"{flex_option.replace(' ', '-')}__{metric_type}__{safe_group}.png",
+            / f"{flex_option.replace(' ', '-')}__{commodity}__{metric_type}__{safe_group}.png",
         )
 
 
@@ -471,7 +562,9 @@ def main(
         "group_type",
         "group",
         "flex_option",
+        "Commodity",
         "metric_type",
+        "direction",
         "flex_value",
         "cost_beur",
         "emissions_kton",
@@ -518,29 +611,45 @@ def main(
     model.collect_results(suffix_naming_only=True)
     res = model.results
 
-    dispatch_scenarios = select_scenario_names(model.scenario_names)
-    region_to_country = region_to_country_map(res.get_result("PRO_YCRAGF"))
+    # `res.get_result()` re-reads/re-parses a symbol's GDX data on every
+    # call, with no cache of its own (see AGENTS.md's pybalmorel note, and
+    # docs/adr/0007's rationale for estimate_flexibility_needs.py's own
+    # pickle cache). This script now calls the same handful of symbols
+    # (PRO_YCRAGF, G_CAP_YCRAF, F_CONS_YCRA, ...) many times over - once per
+    # commodity view that needs them - so an in-memory cache per symbol name
+    # is needed to keep this run in reasonable time/RAM, not just "nice to
+    # have" the way it might have been at the smaller original option count.
+    _symbol_cache: dict = {}
 
-    scenario_metrics = extract_scenario_metrics(model, region_to_country, scenarios)
+    def get_symbol(symbol: str):
+        if symbol not in _symbol_cache:
+            _symbol_cache[symbol] = res.get_result(symbol)
+        return _symbol_cache[symbol]
+
+    dispatch_scenarios = select_scenario_names(model.scenario_names)
+    region_to_country = region_to_country_map(get_symbol("PRO_YCRAGF"))
+
+    scenario_metrics = extract_scenario_metrics(model, get_symbol, region_to_country, scenarios)
     sys_metrics = system_totals(scenario_metrics)
 
     tables = []
-    for flex_option, spec in FLEX_OPTIONS.items():
-        for metric_type in spec["metric_types"]:
-            flex_values = extract_flex_option_values(
-                model, region_to_country, flex_option, metric_type
-            )
-            flex_values = flex_values[flex_values["Scenario"].isin(dispatch_scenarios)]
+    for flex_option, commodities in FLEX_OPTIONS.items():
+        for commodity, spec in commodities.items():
+            for metric_type in _METRIC_TYPES_BY_KIND[spec["kind"]]:
+                for direction, flex_values in extract_flex_option_values(
+                    get_symbol, region_to_country, flex_option, commodity, metric_type
+                ):
+                    flex_values = flex_values[flex_values["Scenario"].isin(dispatch_scenarios)]
 
-            category_table = build_category_table(
-                flex_values, scenario_metrics, category_map, flex_option, metric_type
-            )
-            system_table = build_system_table(
-                flex_values, sys_metrics, flex_option, metric_type
-            )
-            tables.extend([
-                t for t in (category_table, system_table) if not t.empty
-            ])  # TODO: This might be the cause of the scripts' RAM intensiveness - consider appending to .csv instead
+                    category_table = build_category_table(
+                        flex_values, scenario_metrics, category_map, flex_option, commodity, metric_type, direction
+                    )
+                    system_table = build_system_table(
+                        flex_values, sys_metrics, flex_option, commodity, metric_type, direction
+                    )
+                    tables.extend([
+                        t for t in (category_table, system_table) if not t.empty
+                    ])  # TODO: This might be the cause of the scripts' RAM intensiveness - consider appending to .csv instead
 
     tidy = (
         pd.concat(tables, ignore_index=True)
