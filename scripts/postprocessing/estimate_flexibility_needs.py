@@ -18,6 +18,16 @@ value", and docs/adr/0008), per commodity it has a view on, to show what
 timescale it actually operates at, alongside residual load's own
 Daily/Weekly/Annual bars (see docs/adr/0007).
 
+Compute-only - writes flexibility_needs.csv and nothing else. Reading the
+GDX results this needs (particularly PRO_YCRAGFST) is the expensive part of
+this pipeline stage, both in time and RAM, even with the .gdx_cache/*.pkl
+symbol cache (see `_get_result_cached`) - so plotting was split out into
+its own companion script, `plot_flexibility_needs.py`, which only reads
+this CSV and has no GDX/GAMS dependency at all. Run them back to back:
+
+    python estimate_flexibility_needs.py --output-dir build_postprocess
+    python plot_flexibility_needs.py --output-dir build_postprocess
+
 Created on 14.08.2026
 @author: Mathias Berg Rosendal
          PostDoc at DTU Management (Energy Economics & Modelling)
@@ -36,8 +46,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "Balmorel" / "analysis"))
 
 import click
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from decouple import config
 from pybalmorel import Balmorel
@@ -507,126 +515,6 @@ def build_flex_option_category_table(
     )
 
 
-def _stack_bars(
-    ax,
-    x: np.ndarray,
-    sub: pd.DataFrame,
-    hue_col: str,
-    hues: list,
-    scenarios: list,
-    width: float,
-) -> None:
-    """Draws one stacked bar per `x` position (scenario): each `hues` value's
-    flex_need_twh is stacked in turn - positive values upward from the
-    running positive top, negative values downward from the running
-    negative bottom. Residual load's own rows (group_type system/category)
-    are always >=0, so they simply stack upward; flex-option rows
-    (group_type flex_option_system/flex_option_category) carry a
-    demand/supply sign attached in `main()` (see `_DEMAND_SIDE_KINDS`), so
-    e.g. heat pumps/electrolysers stack below the zero line rather than on
-    top of supply-side options."""
-    bottom_pos = np.zeros(len(x))
-    bottom_neg = np.zeros(len(x))
-    for hue in hues:
-        heights = np.array([
-            sub.loc[
-                (sub["Scenario"] == sc) & (sub[hue_col] == hue), "flex_need_twh"
-            ].sum()
-            for sc in scenarios
-        ])
-        pos = np.where(heights >= 0, heights, 0.0)
-        neg = np.where(heights < 0, heights, 0.0)
-        bars = ax.bar(x, pos, width, bottom=bottom_pos, label=hue)
-        color = bars.patches[0].get_facecolor()
-        ax.bar(x, neg, width, bottom=bottom_neg, color=color)
-        bottom_pos += pos
-        bottom_neg += neg
-    ax.axhline(0, color="black", linewidth=0.8)
-
-
-def plot_flexibility_needs(
-    rows: pd.DataFrame, title: str, output_path: Path, hue_col: str = "group"
-) -> None:
-    """One figure, one panel per timescale: x-axis = scenario, one *stacked*
-    bar per timescale (each `hue_col` value stacked in turn, see
-    `_stack_bars`), height = flex_need_twh. `hue_col` defaults to "group"
-    (spatial grouping: system/category/country); pass "flex_option" to
-    stack by flex option instead."""
-    timescales = ["Daily", "Weekly", "Annual"]
-    scenarios = sorted(rows["Scenario"].unique())
-    groups = sorted(rows[hue_col].unique())
-    x = np.arange(len(scenarios))
-    width = 0.6
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    for ax, timescale in zip(axes, timescales):
-        sub = rows[rows["timescale"] == timescale]
-        _stack_bars(ax, x, sub, hue_col, groups, scenarios, width)
-        ax.set_xticks(x)
-        ax.set_xticklabels(scenarios, rotation=45, ha="right")
-        ax.set_title(f"{timescale} flexibility need")
-        ax.set_ylabel("Flexibility need [TWh/a]")
-
-    handles, labels = axes[0].get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    fig.legend(
-        by_label.values(),
-        by_label.keys(),
-        bbox_to_anchor=(1.1, 0.5),
-        loc="center left",
-        fontsize=8,
-    )
-    fig.suptitle(f"Flexibility needs ({title})")
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_flex_option_category_grid(
-    rows: pd.DataFrame, title: str, output_path: Path
-) -> None:
-    """Grid: one row per Combined category, one column per timescale; each
-    subplot stacks scenario x flex option (see `_stack_bars`) - the
-    category-level counterpart to `plot_flexibility_needs(...,
-    hue_col="flex_option")`'s system-wide plot, which can't itself carry a
-    second (category) dimension."""
-    timescales = ["Daily", "Weekly", "Annual"]
-    categories = sorted(rows["group"].unique())
-    flex_options = sorted(rows["flex_option"].unique())
-    scenarios = sorted(rows["Scenario"].unique())
-    x = np.arange(len(scenarios))
-    width = 0.6
-
-    fig, axes = plt.subplots(
-        len(categories), 3, figsize=(15, 4 * len(categories)), squeeze=False
-    )
-    for row_i, category in enumerate(categories):
-        cat_rows = rows[rows["group"] == category]
-        for col_i, timescale in enumerate(timescales):
-            ax = axes[row_i][col_i]
-            sub = cat_rows[cat_rows["timescale"] == timescale]
-            _stack_bars(ax, x, sub, "flex_option", flex_options, scenarios, width)
-            ax.set_xticks(x)
-            ax.set_xticklabels(scenarios, rotation=45, ha="right")
-            if row_i == 0:
-                ax.set_title(f"{timescale} flexibility need")
-            if col_i == 0:
-                ax.set_ylabel(f"{category}\nFlex need [TWh/a]")
-
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    fig.legend(
-        by_label.values(),
-        by_label.keys(),
-        bbox_to_anchor=(1.06, 0.5),
-        loc="center left",
-        fontsize=8,
-    )
-    fig.suptitle(f"Flexibility-option use, by Combined category ({title})")
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
 
 # ------------------------------- #
 #            2. Main              #
@@ -650,7 +538,8 @@ def plot_flex_option_category_grid(
     "--output-dir",
     type=str,
     default="build_postprocess",
-    help="Where to write flexibility_needs.csv and flex_needs_plots/",
+    help="Where to write flexibility_needs.csv (and cache read GDX symbols under .gdx_cache/). "
+    "Plotting it is a separate step - see plot_flexibility_needs.py.",
 )
 @click.option(
     "--categorization-csv",
@@ -696,8 +585,7 @@ def main(
     overwrite_cache: bool,
 ):
     output_path = Path(output_dir)
-    plots_dir = output_path / "flex_needs_plots"
-    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
     table_path = output_path / "flexibility_needs.csv"
     cache_dir = output_path / ".gdx_cache"
 
@@ -775,7 +663,9 @@ def main(
 
             tables.append(build_system_table(rl, commodity, scenario_name, year))
             tables.append(
-                build_category_table(rl, category_map, commodity, scenario_name, year)
+                build_category_table(
+                    rl, category_map, commodity, scenario_name, year
+                )
             )
             tables.append(build_country_table(rl, commodity, scenario_name, year))
 
@@ -803,7 +693,12 @@ def main(
             tables.append(system_table)
 
             category_table = build_flex_option_category_table(
-                hourly_net, category_map, flex_option, commodity, scenario_name, year
+                hourly_net,
+                category_map,
+                flex_option,
+                commodity,
+                scenario_name,
+                year,
             )
             category_table["flex_need_twh"] *= sign
             tables.append(category_table)
@@ -816,45 +711,7 @@ def main(
     if years:
         tidy = tidy[tidy["Year"].astype(str).isin([str(y) for y in years])]
     tidy.to_csv(table_path, index=False)
-
-    if tidy.empty:
-        return
-
-    for commodity in COMMODITIES:
-        by_commodity = tidy[tidy["Commodity"] == commodity]
-        if by_commodity.empty:
-            continue
-
-        for group_type in ("system", "category"):
-            subset = by_commodity[by_commodity["group_type"] == group_type]
-            if subset.empty:
-                continue
-            plot_flexibility_needs(
-                subset,
-                f"{group_type}, {commodity}",
-                plots_dir / f"{group_type}_{commodity}.png",
-            )
-
-        option_system_rows = by_commodity[
-            by_commodity["group_type"] == "flex_option_system"
-        ]
-        if not option_system_rows.empty:
-            plot_flexibility_needs(
-                option_system_rows,
-                f"flexibility options, system-wide ({commodity})",
-                plots_dir / f"system_by_option_{commodity}.png",
-                hue_col="flex_option",
-            )
-
-        option_category_rows = by_commodity[
-            by_commodity["group_type"] == "flex_option_category"
-        ]
-        if not option_category_rows.empty:
-            plot_flex_option_category_grid(
-                option_category_rows,
-                commodity,
-                plots_dir / f"category_by_option_{commodity}.png",
-            )
+    print(f"Wrote {len(tidy)} row(s) to {table_path}. Plot with plot_flexibility_needs.py.")
 
 
 if __name__ == "__main__":
