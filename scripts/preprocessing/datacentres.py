@@ -1,7 +1,8 @@
 """
 Pre-processing of TYNDP2024 and AF25 projections of datacenter load
 
-Will generate inputs for datacenter demand and demand response potential
+Will generate inputs for datacenter demand and demand response potential.
+Making no assumptions for non-EU member states, i.e.: no demand for datacentres in Norway, UK etc.
 
 Created on 08.05.2026
 @author: Mathias Berg Rosendal
@@ -98,7 +99,7 @@ def datacenterload(ctx, scenario):
     df_interp = df_expanded.interpolate(axis=1)
 
     # Assume even distribution of datacentres to bidding zones
-    # NOTE: Making no assumptions for non-EU member states, i.e.: no demand for datacentres in Norway, UK etc.
+    # WARNING: Making no assumptions for non-EU member states, i.e.: no demand for datacentres in Norway, UK etc.
     df_interp.index = df_interp.index.str.replace("FI", "FIN")
     df_interp.loc["SE", :] = df_interp.loc["SE", :] / 4
     df_interp.loc["SE1", :] = df_interp.loc["SE", :]
