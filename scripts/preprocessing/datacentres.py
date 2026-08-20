@@ -1,5 +1,5 @@
 """
-Pre-processing of TYNDP2024 Data
+Pre-processing of TYNDP2024 and AF25 projections of datacenter load
 
 Will generate inputs for datacenter demand and demand response potential
 
