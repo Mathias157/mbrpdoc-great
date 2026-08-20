@@ -52,7 +52,10 @@ from scripts.postprocessing.categorize_countries import (
     scenario_target_year,
     select_scenario_names,
 )
-from scripts.postprocessing.flex_option_metrics import FLEX_OPTIONS, STORAGE_CHARGE_CATEGORIES
+from scripts.postprocessing.flex_option_metrics import (
+    FLEX_OPTIONS,
+    STORAGE_CHARGE_CATEGORIES,
+)
 
 # ------------------------------- #
 #          1. Functions           #
@@ -65,7 +68,11 @@ COMMODITIES = ("ELECTRICITY", "HEAT", "HYDROGEN")
 # dataset already uses internally (VRE_CERT_AS.inc). Electricity-only - see
 # docs/adr/0006/0009 for why heat and hydrogen have no non-dispatchable
 # supply counterpart.
-NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [*WIND_TECHNOLOGIES, *SOLAR_TECHNOLOGIES, "HYDRO-RUN-OF-RIVER"]
+NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [
+    *WIND_TECHNOLOGIES,
+    *SOLAR_TECHNOLOGIES,
+    "HYDRO-RUN-OF-RIVER",
+]
 
 # EL_DEMAND_YCRST's own VARIABLE_CATEGORY values that may count as
 # non-dispatchable demand - see docs/adr/0006 for why EXOGENOUS is the only
@@ -76,7 +83,16 @@ NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [*WIND_TECHNOLOGIES, *SOLAR_TECHNOLOGIES,
 DEMAND_CATEGORY_CHOICES = ["EXOGENOUS", "ENDOGENOUS_ELECT2HEAT", "ENDO_EV"]
 NON_ELECTRICITY_DEMAND_CATEGORIES = ("EXOGENOUS",)
 
-NEEDS_COLUMNS = ["Scenario", "Year", "group_type", "group", "flex_option", "Commodity", "timescale", "flex_need_twh"]
+NEEDS_COLUMNS = [
+    "Scenario",
+    "Year",
+    "group_type",
+    "group",
+    "flex_option",
+    "Commodity",
+    "timescale",
+    "flex_need_twh",
+]
 
 _EMPTY_HOURLY = pd.DataFrame(columns=["Country", "Season", "Time", "Value"])
 
@@ -96,8 +112,27 @@ HOURLY_FLEX_OPTIONS = [
     if spec["kind"] != "system_only"
 ]
 
+# `flexibility_needs()` is sign-invariant by construction (built from
+# |deviation from mean|, see its docstring) - it can't itself tell a
+# demand-side option's bar from a supply-side one. For flex_option_system/
+# flex_option_category rows only (never residual load's own system/category
+# rows), `main()` reattaches a demand/supply sign to flex_need_twh after the
+# fact, purely for display (stacking below vs above the zero line - see
+# `_stack_bars`) - using the same "kind" convention flex_option_metrics.py's
+# FLEX_OPTIONS docstring already documents ("consumption": negative/
+# demand-side electricity draw). "production"/"peaker" are always
+# supply-side so are left positive; "storage"/"transmission"/"net_category"
+# are genuinely bidirectional (not a fixed demand- or supply-side role) so
+# are also left as-is (positive, i.e. stacked on the supply side) rather
+# than signed by their often near-zero net-period sum (e.g. storage nets
+# slightly negative from round-trip losses, which would misleadingly stack
+# it as "demand-side"). See docs/adr/0011.
+_DEMAND_SIDE_KINDS = {"consumption"}
 
-def _get_result_cached(res, symbol: str, cache_dir: Path, overwrite: bool) -> pd.DataFrame:
+
+def _get_result_cached(
+    res, symbol: str, cache_dir: Path, overwrite: bool
+) -> pd.DataFrame:
     """`res.get_result(symbol)`, pickle-cached to `cache_dir/<symbol>.pkl`.
     PRO_YCRAGFST in particular is a large hourly GDX read reused by every
     technology/peaker flex option below, so re-running this script (e.g. to
@@ -107,28 +142,46 @@ def _get_result_cached(res, symbol: str, cache_dir: Path, overwrite: bool) -> pd
     the (already gitignored) --output-dir."""
     cache_path = cache_dir / f"{symbol}.pkl"
     if cache_path.exists() and not overwrite:
+        print(f"Loading {symbol} from cached .pkl file")
         return pd.read_pickle(cache_path)
+    print(f"Loading {symbol} from Balmorel results")
     df = res.get_result(symbol)
     cache_dir.mkdir(parents=True, exist_ok=True)
     df.to_pickle(cache_path)
     return df
 
 
-def country_hourly_demand(demand_df: pd.DataFrame, demand_categories: tuple, scenario_name: str, year: str) -> pd.DataFrame:
+def country_hourly_demand(
+    demand_df: pd.DataFrame, demand_categories: tuple, scenario_name: str, year: str
+) -> pd.DataFrame:
     """(Country, Season, Time, Value): non-dispatchable demand (MWh) per
     country-hour, summed over the chosen `demand_categories`. `demand_df` is
     whichever commodity's own hourly demand symbol (EL_DEMAND_YCRST /
     H_DEMAND_YCRAST / H2_DEMAND_YCRST)."""
     query = "Scenario == @scenario_name and Year == @year and Category in @demand_categories"
-    return demand_df.query(query).groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+    return (
+        demand_df
+        .query(query)
+        .groupby(["Country", "Season", "Time"])["Value"]
+        .sum()
+        .reset_index()
+    )
 
 
-def country_hourly_supply(pro: pd.DataFrame, scenario_name: str, year: str) -> pd.DataFrame:
+def country_hourly_supply(
+    pro: pd.DataFrame, scenario_name: str, year: str
+) -> pd.DataFrame:
     """(Country, Season, Time, Value): non-dispatchable supply (MWh) per
     country-hour - wind, solar and run-of-river production. Electricity
     only - see docs/adr/0009."""
     query = "Scenario == @scenario_name and Year == @year and Technology in @NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES"
-    return pro.query(query).groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+    return (
+        pro
+        .query(query)
+        .groupby(["Country", "Season", "Time"])["Value"]
+        .sum()
+        .reset_index()
+    )
 
 
 def country_residual_load(demand: pd.DataFrame, supply: pd.DataFrame) -> pd.DataFrame:
@@ -139,7 +192,10 @@ def country_residual_load(demand: pd.DataFrame, supply: pd.DataFrame) -> pd.Data
     heat/hydrogen residual load (demand only, no supply netting, see
     docs/adr/0009) is computed: `supply` is simply passed in empty."""
     merged = demand.merge(
-        supply, on=["Country", "Season", "Time"], how="outer", suffixes=("_demand", "_supply")
+        supply,
+        on=["Country", "Season", "Time"],
+        how="outer",
+        suffixes=("_demand", "_supply"),
     ).fillna(0)
     merged["Value"] = merged["Value_demand"] - merged["Value_supply"]
     return merged[["Country", "Season", "Time", "Value"]]
@@ -153,7 +209,10 @@ def _net_hourly(supply: pd.DataFrame, demand: pd.DataFrame) -> pd.DataFrame:
     single-directional option (e.g. heat pumps have no "supply" component
     on the electricity view)."""
     merged = supply.merge(
-        demand, on=["Country", "Season", "Time"], how="outer", suffixes=("_supply", "_demand")
+        demand,
+        on=["Country", "Season", "Time"],
+        how="outer",
+        suffixes=("_supply", "_demand"),
     ).fillna(0)
     merged["Value"] = merged["Value_supply"] - merged["Value_demand"]
     return merged[["Country", "Season", "Time", "Value"]]
@@ -184,8 +243,12 @@ def flexibility_needs(hourly: pd.DataFrame) -> dict:
 
     mwh_to_twh = 1e-6
     return {
-        "Daily": 0.5 * (working["Value"] - working["daily_mean"]).abs().sum() * mwh_to_twh,
-        "Weekly": 0.5 * (working["daily_mean"] - working["weekly_mean"]).abs().sum() * mwh_to_twh,
+        "Daily": 0.5
+        * (working["Value"] - working["daily_mean"]).abs().sum()
+        * mwh_to_twh,
+        "Weekly": 0.5
+        * (working["daily_mean"] - working["weekly_mean"]).abs().sum()
+        * mwh_to_twh,
         "Annual": 0.5 * (working["weekly_mean"] - annual_mean).abs().sum() * mwh_to_twh,
     }
 
@@ -202,49 +265,84 @@ def _needs_rows(
     if hourly.empty:
         return pd.DataFrame(columns=NEEDS_COLUMNS)
     needs = flexibility_needs(hourly)
-    return pd.DataFrame(
-        {
-            "Scenario": scenario_name,
-            "Year": year,
-            "group_type": group_type,
-            "group": group,
-            "flex_option": flex_option,
-            "Commodity": commodity,
-            "timescale": list(needs.keys()),
-            "flex_need_twh": list(needs.values()),
-        }
-    )
+    return pd.DataFrame({
+        "Scenario": scenario_name,
+        "Year": year,
+        "group_type": group_type,
+        "group": group,
+        "flex_option": flex_option,
+        "Commodity": commodity,
+        "timescale": list(needs.keys()),
+        "flex_need_twh": list(needs.values()),
+    })
 
 
-def build_system_table(rl: pd.DataFrame, commodity: str, scenario_name: str, year: str) -> pd.DataFrame:
+def build_system_table(
+    rl: pd.DataFrame, commodity: str, scenario_name: str, year: str
+) -> pd.DataFrame:
     """Flexibility needs summed across every country in `rl` - one system-
     wide hourly residual load series."""
     hourly = rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
-    return _needs_rows(hourly, scenario_name, year, group_type="system", group="All", commodity=commodity)
+    return _needs_rows(
+        hourly,
+        scenario_name,
+        year,
+        group_type="system",
+        group="All",
+        commodity=commodity,
+    )
 
 
-def build_category_table(rl: pd.DataFrame, category_map: dict, commodity: str, scenario_name: str, year: str) -> pd.DataFrame:
+def build_category_table(
+    rl: pd.DataFrame, category_map: dict, commodity: str, scenario_name: str, year: str
+) -> pd.DataFrame:
     """Flexibility needs per Combined category - each category's hourly
     residual load is its member countries' (fixed via `category_map`, see
     docs/adr/0004) hourly residual load summed together."""
-    categorized = rl.assign(combined_category=rl["Country"].map(category_map)).dropna(subset=["combined_category"])
+    categorized = rl.assign(combined_category=rl["Country"].map(category_map)).dropna(
+        subset=["combined_category"]
+    )
     tables = []
     for group, group_rl in categorized.groupby("combined_category"):
         hourly = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
-        tables.append(_needs_rows(hourly, scenario_name, year, group_type="category", group=group, commodity=commodity))
-    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
+        tables.append(
+            _needs_rows(
+                hourly,
+                scenario_name,
+                year,
+                group_type="category",
+                group=group,
+                commodity=commodity,
+            )
+        )
+    return (
+        pd.concat(tables, ignore_index=True)
+        if tables
+        else pd.DataFrame(columns=NEEDS_COLUMNS)
+    )
 
 
-def build_country_table(rl: pd.DataFrame, commodity: str, scenario_name: str, year: str) -> pd.DataFrame:
+def build_country_table(
+    rl: pd.DataFrame, commodity: str, scenario_name: str, year: str
+) -> pd.DataFrame:
     """Flexibility needs per individual country - table rows only (no plot,
     see docs/adr/0006/CONTEXT.md), to avoid one PNG per country."""
     tables = [
         _needs_rows(
-            group_rl[["Season", "Time", "Value"]], scenario_name, year, group_type="country", group=country, commodity=commodity
+            group_rl[["Season", "Time", "Value"]],
+            scenario_name,
+            year,
+            group_type="country",
+            group=country,
+            commodity=commodity,
         )
         for country, group_rl in rl.groupby("Country")
     ]
-    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
+    return (
+        pd.concat(tables, ignore_index=True)
+        if tables
+        else pd.DataFrame(columns=NEEDS_COLUMNS)
+    )
 
 
 def flex_option_hourly_net(
@@ -281,7 +379,10 @@ def flex_option_hourly_net(
 
     def _tech_rows(df: pd.DataFrame) -> pd.DataFrame:
         sub = _scenario_year(df)
-        sub = sub[(sub["Commodity"] == commodity) & (sub["Technology"].isin(spec["technologies"]))]
+        sub = sub[
+            (sub["Commodity"] == commodity)
+            & (sub["Technology"].isin(spec["technologies"]))
+        ]
         if "fuels" in spec:
             sub = sub[sub["Fuel"].isin(spec["fuels"])]
         if "exclude_fuels" in spec:
@@ -295,7 +396,9 @@ def flex_option_hourly_net(
 
     if kind == "consumption":
         sub = _scenario_year(f_cons)
-        sub = sub[(sub["Technology"].isin(spec["technologies"])) & (sub["Fuel"] == "ELECTRIC")]
+        sub = sub[
+            (sub["Technology"].isin(spec["technologies"])) & (sub["Fuel"] == "ELECTRIC")
+        ]
         demand = sub.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
         return _net_hourly(_EMPTY_HOURLY, demand)
 
@@ -313,27 +416,45 @@ def flex_option_hourly_net(
         # symbol's From/To sign convention - "use" here means how much the
         # interconnector is utilised, not net export/import direction
         # (deliberately kept unsigned/out of scope, see docs/adr/0008).
-        supply = df.assign(Value=df["Value"].abs()).groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+        supply = (
+            df
+            .assign(Value=df["Value"].abs())
+            .groupby(["Country", "Season", "Time"])["Value"]
+            .sum()
+            .reset_index()
+        )
         return _net_hourly(supply, _EMPTY_HOURLY)
 
     if kind == "net_category":
         dem = _scenario_year(demand_symbols[commodity])
         dem = dem[dem["Category"] == spec["category"]]
         rows = dem.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
-        rows["Value"] *= -1  # demand-table convention ("more demand" = positive) -> "positive = supply"
+        rows[
+            "Value"
+        ] *= (
+            -1
+        )  # demand-table convention ("more demand" = positive) -> "positive = supply"
         return rows
 
     if kind == "peaker":
         backup = backup_production(_scenario_year(pro), commodity=commodity)
-        df = backup.assign(Country=backup["Region"].map(region_to_country)).dropna(subset=["Country"])
+        df = backup.assign(Country=backup["Region"].map(region_to_country)).dropna(
+            subset=["Country"]
+        )
         supply = df.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
         return _net_hourly(supply, _EMPTY_HOURLY)
 
-    raise ValueError(f"{kind!r} has no hourly resolution for flexibility-need decomposition")
+    raise ValueError(
+        f"{kind!r} has no hourly resolution for flexibility-need decomposition"
+    )
 
 
 def build_flex_option_system_table(
-    hourly_net: pd.DataFrame, flex_option: str, commodity: str, scenario_name: str, year: str
+    hourly_net: pd.DataFrame,
+    flex_option: str,
+    commodity: str,
+    scenario_name: str,
+    year: str,
 ) -> pd.DataFrame:
     """Daily/Weekly/Annual decomposition of one flex option's own commodity-
     signed net hourly dispatch, summed across every country - system-wide
@@ -341,19 +462,30 @@ def build_flex_option_system_table(
     operation, not residual load."""
     hourly = hourly_net.groupby(["Season", "Time"])["Value"].sum().reset_index()
     return _needs_rows(
-        hourly, scenario_name, year, group_type="flex_option_system", group="All", commodity=commodity, flex_option=flex_option
+        hourly,
+        scenario_name,
+        year,
+        group_type="flex_option_system",
+        group="All",
+        commodity=commodity,
+        flex_option=flex_option,
     )
 
 
 def build_flex_option_category_table(
-    hourly_net: pd.DataFrame, category_map: dict, flex_option: str, commodity: str, scenario_name: str, year: str
+    hourly_net: pd.DataFrame,
+    category_map: dict,
+    flex_option: str,
+    commodity: str,
+    scenario_name: str,
+    year: str,
 ) -> pd.DataFrame:
     """Daily/Weekly/Annual decomposition of one flex option's own commodity-
     signed net hourly dispatch, per Combined category - category-level
     equivalent of `build_category_table`."""
-    categorized = hourly_net.assign(combined_category=hourly_net["Country"].map(category_map)).dropna(
-        subset=["combined_category"]
-    )
+    categorized = hourly_net.assign(
+        combined_category=hourly_net["Country"].map(category_map)
+    ).dropna(subset=["combined_category"])
     tables = []
     for group, group_use in categorized.groupby("combined_category"):
         hourly = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
@@ -368,68 +500,113 @@ def build_flex_option_category_table(
                 flex_option=flex_option,
             )
         )
-    return pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
+    return (
+        pd.concat(tables, ignore_index=True)
+        if tables
+        else pd.DataFrame(columns=NEEDS_COLUMNS)
+    )
 
 
-def plot_flexibility_needs(rows: pd.DataFrame, title: str, output_path: Path, hue_col: str = "group") -> None:
-    """One figure, one panel per timescale: x-axis = scenario, one bar per
-    `hue_col` value (a single 'All' bar for system-level), height =
-    flex_need_twh. `hue_col` defaults to "group" (spatial grouping: system/
-    category/country); pass "flex_option" to legend by flex option instead."""
+def _stack_bars(
+    ax,
+    x: np.ndarray,
+    sub: pd.DataFrame,
+    hue_col: str,
+    hues: list,
+    scenarios: list,
+    width: float,
+) -> None:
+    """Draws one stacked bar per `x` position (scenario): each `hues` value's
+    flex_need_twh is stacked in turn - positive values upward from the
+    running positive top, negative values downward from the running
+    negative bottom. Residual load's own rows (group_type system/category)
+    are always >=0, so they simply stack upward; flex-option rows
+    (group_type flex_option_system/flex_option_category) carry a
+    demand/supply sign attached in `main()` (see `_DEMAND_SIDE_KINDS`), so
+    e.g. heat pumps/electrolysers stack below the zero line rather than on
+    top of supply-side options."""
+    bottom_pos = np.zeros(len(x))
+    bottom_neg = np.zeros(len(x))
+    for hue in hues:
+        heights = np.array([
+            sub.loc[
+                (sub["Scenario"] == sc) & (sub[hue_col] == hue), "flex_need_twh"
+            ].sum()
+            for sc in scenarios
+        ])
+        pos = np.where(heights >= 0, heights, 0.0)
+        neg = np.where(heights < 0, heights, 0.0)
+        bars = ax.bar(x, pos, width, bottom=bottom_pos, label=hue)
+        color = bars.patches[0].get_facecolor()
+        ax.bar(x, neg, width, bottom=bottom_neg, color=color)
+        bottom_pos += pos
+        bottom_neg += neg
+    ax.axhline(0, color="black", linewidth=0.8)
+
+
+def plot_flexibility_needs(
+    rows: pd.DataFrame, title: str, output_path: Path, hue_col: str = "group"
+) -> None:
+    """One figure, one panel per timescale: x-axis = scenario, one *stacked*
+    bar per timescale (each `hue_col` value stacked in turn, see
+    `_stack_bars`), height = flex_need_twh. `hue_col` defaults to "group"
+    (spatial grouping: system/category/country); pass "flex_option" to
+    stack by flex option instead."""
     timescales = ["Daily", "Weekly", "Annual"]
     scenarios = sorted(rows["Scenario"].unique())
     groups = sorted(rows[hue_col].unique())
     x = np.arange(len(scenarios))
-    width = 0.8 / max(len(groups), 1)
+    width = 0.6
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     for ax, timescale in zip(axes, timescales):
         sub = rows[rows["timescale"] == timescale]
-        for i, group in enumerate(groups):
-            heights = [
-                sub.loc[(sub["Scenario"] == sc) & (sub[hue_col] == group), "flex_need_twh"].sum()
-                for sc in scenarios
-            ]
-            ax.bar(x + i * width, heights, width, label=group)
-        ax.set_xticks(x + width * (len(groups) - 1) / 2)
+        _stack_bars(ax, x, sub, hue_col, groups, scenarios, width)
+        ax.set_xticks(x)
         ax.set_xticklabels(scenarios, rotation=45, ha="right")
         ax.set_title(f"{timescale} flexibility need")
         ax.set_ylabel("Flexibility need [TWh/a]")
 
     handles, labels = axes[0].get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    fig.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.1, 0.5), loc="center left", fontsize=8)
+    fig.legend(
+        by_label.values(),
+        by_label.keys(),
+        bbox_to_anchor=(1.1, 0.5),
+        loc="center left",
+        fontsize=8,
+    )
     fig.suptitle(f"Flexibility needs ({title})")
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
-def plot_flex_option_category_grid(rows: pd.DataFrame, title: str, output_path: Path) -> None:
+def plot_flex_option_category_grid(
+    rows: pd.DataFrame, title: str, output_path: Path
+) -> None:
     """Grid: one row per Combined category, one column per timescale; each
-    subplot bars scenario x flex option - the category-level counterpart to
-    `plot_flexibility_needs(..., hue_col="flex_option")`'s system-wide plot,
-    which can't itself carry a second (category) dimension."""
+    subplot stacks scenario x flex option (see `_stack_bars`) - the
+    category-level counterpart to `plot_flexibility_needs(...,
+    hue_col="flex_option")`'s system-wide plot, which can't itself carry a
+    second (category) dimension."""
     timescales = ["Daily", "Weekly", "Annual"]
     categories = sorted(rows["group"].unique())
     flex_options = sorted(rows["flex_option"].unique())
     scenarios = sorted(rows["Scenario"].unique())
     x = np.arange(len(scenarios))
-    width = 0.8 / max(len(flex_options), 1)
+    width = 0.6
 
-    fig, axes = plt.subplots(len(categories), 3, figsize=(15, 4 * len(categories)), squeeze=False)
+    fig, axes = plt.subplots(
+        len(categories), 3, figsize=(15, 4 * len(categories)), squeeze=False
+    )
     for row_i, category in enumerate(categories):
         cat_rows = rows[rows["group"] == category]
         for col_i, timescale in enumerate(timescales):
             ax = axes[row_i][col_i]
             sub = cat_rows[cat_rows["timescale"] == timescale]
-            for i, option in enumerate(flex_options):
-                heights = [
-                    sub.loc[(sub["Scenario"] == sc) & (sub["flex_option"] == option), "flex_need_twh"].sum()
-                    for sc in scenarios
-                ]
-                ax.bar(x + i * width, heights, width, label=option)
-            ax.set_xticks(x + width * (len(flex_options) - 1) / 2)
+            _stack_bars(ax, x, sub, "flex_option", flex_options, scenarios, width)
+            ax.set_xticks(x)
             ax.set_xticklabels(scenarios, rotation=45, ha="right")
             if row_i == 0:
                 ax.set_title(f"{timescale} flexibility need")
@@ -438,7 +615,13 @@ def plot_flex_option_category_grid(rows: pd.DataFrame, title: str, output_path: 
 
     handles, labels = axes[0][0].get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    fig.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.06, 0.5), loc="center left", fontsize=8)
+    fig.legend(
+        by_label.values(),
+        by_label.keys(),
+        bbox_to_anchor=(1.06, 0.5),
+        loc="center left",
+        fontsize=8,
+    )
     fig.suptitle(f"Flexibility-option use, by Combined category ({title})")
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -519,20 +702,28 @@ def main(
     cache_dir = output_path / ".gdx_cache"
 
     categorization_path = (
-        Path(categorization_csv) if categorization_csv else output_path / "categorization.csv"
+        Path(categorization_csv)
+        if categorization_csv
+        else output_path / "categorization.csv"
     )
     if not categorization_path.exists():
-        print(f"{categorization_path} not found - run categorize_countries.py first. Nothing to compute.")
+        print(
+            f"{categorization_path} not found - run categorize_countries.py first. Nothing to compute."
+        )
         pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
         return
 
     categorization = pd.read_csv(categorization_path)
     category_map = build_reference_category_map(categorization, reference_scenario)
     if not category_map:
-        print(f"Reference scenario {reference_scenario!r} not found in {categorization_path}. Category-level needs will be empty.")
+        print(
+            f"Reference scenario {reference_scenario!r} not found in {categorization_path}. Category-level needs will be empty."
+        )
 
     if not any(Path(balmorel_path).glob("*/model/MainResults_*.gdx")):
-        print(f"No MainResults*.gdx files found under {balmorel_path} - nothing to compute yet.")
+        print(
+            f"No MainResults*.gdx files found under {balmorel_path} - nothing to compute yet."
+        )
         pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
         return
 
@@ -551,7 +742,9 @@ def main(
     demand_symbols = {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2}
 
     scenario_names = select_scenario_names(model.scenario_names)
-    print(f"Estimating flexibility needs for {len(scenario_names)} fullyear/rolling scenario result(s): {scenario_names}")
+    print(
+        f"Estimating flexibility needs for {len(scenario_names)} fullyear/rolling scenario result(s): {scenario_names}"
+    )
 
     tables = []
     for scenario_name in scenario_names:
@@ -561,32 +754,65 @@ def main(
 
         for commodity in COMMODITIES:
             if commodity == "ELECTRICITY":
-                demand = country_hourly_demand(el, tuple(demand_categories), scenario_name, year)
+                demand = country_hourly_demand(
+                    el, tuple(demand_categories), scenario_name, year
+                )
                 supply = country_hourly_supply(pro, scenario_name, year)
             else:
                 # No non-dispatchable supply on the heat/hydrogen side - see
                 # docs/adr/0009 - so `supply` is left empty and residual
                 # load is just non-dispatchable demand.
-                demand = country_hourly_demand(demand_symbols[commodity], NON_ELECTRICITY_DEMAND_CATEGORIES, scenario_name, year)
+                demand = country_hourly_demand(
+                    demand_symbols[commodity],
+                    NON_ELECTRICITY_DEMAND_CATEGORIES,
+                    scenario_name,
+                    year,
+                )
                 supply = _EMPTY_HOURLY
             if demand.empty and supply.empty:
                 continue
             rl = country_residual_load(demand, supply)
 
             tables.append(build_system_table(rl, commodity, scenario_name, year))
-            tables.append(build_category_table(rl, category_map, commodity, scenario_name, year))
+            tables.append(
+                build_category_table(rl, category_map, commodity, scenario_name, year)
+            )
             tables.append(build_country_table(rl, commodity, scenario_name, year))
 
         for flex_option, commodity, spec in HOURLY_FLEX_OPTIONS:
             hourly_net = flex_option_hourly_net(
-                spec, commodity, pro, f_cons, demand_symbols, x_flow, xh2_flow, region_to_country, scenario_name, year
+                spec,
+                commodity,
+                pro,
+                f_cons,
+                demand_symbols,
+                x_flow,
+                xh2_flow,
+                region_to_country,
+                scenario_name,
+                year,
             )
             if hourly_net.empty:
                 continue
-            tables.append(build_flex_option_system_table(hourly_net, flex_option, commodity, scenario_name, year))
-            tables.append(build_flex_option_category_table(hourly_net, category_map, flex_option, commodity, scenario_name, year))
+            sign = -1.0 if spec["kind"] in _DEMAND_SIDE_KINDS else 1.0
 
-    tidy = pd.concat(tables, ignore_index=True) if tables else pd.DataFrame(columns=NEEDS_COLUMNS)
+            system_table = build_flex_option_system_table(
+                hourly_net, flex_option, commodity, scenario_name, year
+            )
+            system_table["flex_need_twh"] *= sign
+            tables.append(system_table)
+
+            category_table = build_flex_option_category_table(
+                hourly_net, category_map, flex_option, commodity, scenario_name, year
+            )
+            category_table["flex_need_twh"] *= sign
+            tables.append(category_table)
+
+    tidy = (
+        pd.concat(tables, ignore_index=True)
+        if tables
+        else pd.DataFrame(columns=NEEDS_COLUMNS)
+    )
     if years:
         tidy = tidy[tidy["Year"].astype(str).isin([str(y) for y in years])]
     tidy.to_csv(table_path, index=False)
@@ -603,9 +829,15 @@ def main(
             subset = by_commodity[by_commodity["group_type"] == group_type]
             if subset.empty:
                 continue
-            plot_flexibility_needs(subset, f"{group_type}, {commodity}", plots_dir / f"{group_type}_{commodity}.png")
+            plot_flexibility_needs(
+                subset,
+                f"{group_type}, {commodity}",
+                plots_dir / f"{group_type}_{commodity}.png",
+            )
 
-        option_system_rows = by_commodity[by_commodity["group_type"] == "flex_option_system"]
+        option_system_rows = by_commodity[
+            by_commodity["group_type"] == "flex_option_system"
+        ]
         if not option_system_rows.empty:
             plot_flexibility_needs(
                 option_system_rows,
@@ -614,9 +846,15 @@ def main(
                 hue_col="flex_option",
             )
 
-        option_category_rows = by_commodity[by_commodity["group_type"] == "flex_option_category"]
+        option_category_rows = by_commodity[
+            by_commodity["group_type"] == "flex_option_category"
+        ]
         if not option_category_rows.empty:
-            plot_flex_option_category_grid(option_category_rows, commodity, plots_dir / f"category_by_option_{commodity}.png")
+            plot_flex_option_category_grid(
+                option_category_rows,
+                commodity,
+                plots_dir / f"category_by_option_{commodity}.png",
+            )
 
 
 if __name__ == "__main__":
