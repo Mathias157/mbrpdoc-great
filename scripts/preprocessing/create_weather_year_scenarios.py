@@ -50,7 +50,13 @@ import click
 # a one-off subset instead of the full range (--years also overrides it).
 YEARS = list(range(1982, 2021))
 
-MODEL_FILES_TO_COPY = ["Balmorel.gms", "cplex.op2", "cplex.op4", "balopt_full.opt", "balopt_roll.opt"]
+MODEL_FILES_TO_COPY = [
+    "Balmorel.gms",
+    "cplex.op2",
+    "cplex.op4",
+    "balopt_full.opt",
+    "balopt_roll.opt",
+]
 
 
 def create_weather_year_folder(balmorel_path: Path, scenario: str, year: int) -> Path:
@@ -68,9 +74,10 @@ def create_weather_year_folder(balmorel_path: Path, scenario: str, year: int) ->
     (target / "model").mkdir()
     (target / "simex").mkdir()
 
-    for source_file in (source / "data").iterdir():
-        if source_file.is_file():
-            shutil.copy2(source_file, target / "data" / source_file.name)
+    if scenario != "base":
+        for source_file in (source / "data").iterdir():
+            if source_file.is_file():
+                shutil.copy2(source_file, target / "data" / source_file.name)
 
     for filename in MODEL_FILES_TO_COPY:
         shutil.copy2(source / "model" / filename, target / "model" / filename)
@@ -91,7 +98,12 @@ def create_weather_year_folder(balmorel_path: Path, scenario: str, year: int) ->
     required=True,
     help="Source scenario folder name (e.g. H2NHPN) whose simex_INV every weather year run reuses.",
 )
-@click.option("--balmorel-path", type=str, default="scripts/Balmorel", help="Path to the top level of Balmorel scenario folders")
+@click.option(
+    "--balmorel-path",
+    type=str,
+    default="scripts/Balmorel",
+    help="Path to the top level of Balmorel scenario folders",
+)
 @click.option(
     "--years",
     multiple=True,
@@ -106,7 +118,9 @@ def main(scenario: str, balmorel_path: str, years: tuple):
         raise click.ClickException(f"Source scenario folder {source} does not exist.")
 
     selected_years = list(years) if years else YEARS
-    print(f"Creating {len(selected_years)} weather year scenario folder(s) for source scenario {scenario!r}...")
+    print(
+        f"Creating {len(selected_years)} weather year scenario folder(s) for source scenario {scenario!r}..."
+    )
     for year in selected_years:
         folder = create_weather_year_folder(balmorel_dir, scenario, year)
         print(f"  {folder}")
