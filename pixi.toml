@@ -76,6 +76,11 @@ args = ["scenario"]
 cmd = "python scripts/preprocessing/create_weather_year_scenarios.py --scenario {{ scenario }}"
 description = "Scaffold <scenario>_WY<year>/ folders (1982-2020) for weather year runs off <scenario>'s simex_INV (see docs/adr/0013/0014)"
 
+[tasks.sophia-sync-weather-years]
+args = ["scenario"]
+cmd = "rsync -avzu scripts/Balmorel/{{ scenario }}_WY* mberos@sophia.dtu.dk:~/Repos/GREAT/"
+description = "Push <scenario>_WY<year>/ folders (run create-weather-year-scenarios first) to sophia.dtu.dk for submission"
+
 [pypi-dependencies]
 pybalmorel = ">=1.2.1, <2"
 python-decouple = ">=3.8, <4"
