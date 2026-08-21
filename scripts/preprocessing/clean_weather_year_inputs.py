@@ -2,13 +2,23 @@
 Clean Weather-Year Inputs Down to Balmorel-Ready .inc Files
 
 For one historical weather year, trims generate_weather_year_inputs.py's
-full raw output (Excel review files, per-technology stats, CapDev, ...)
-down to just the two .inc file sets a weather year run actually needs -
-HourlyDispatch/raw (8760h resolution, feeds rolling runs) and
-HourlyDispatch/scaled_long_term (long-term-corrected aggregated resolution,
-feeds fullyear runs) - copying them into the shared, gitignored
-scripts/Balmorel/weatheryeardata/{data_raw,data_scaled}/<year>/ that
-jobs/slurm/fullyear_2050_wy.sh/rolling_2050_wy.sh read from at run time.
+full raw output (Excel review files, per-technology stats, ...) down to
+just the .inc file sets a weather year run - or a future weather-year-aware
+investment run - could need, copying them into the shared, gitignored
+scripts/Balmorel/weatheryeardata/<variant>/<year>/ that
+jobs/slurm/fullyear_2050_wy.sh/rolling_2050_wy.sh read from at run time:
+
+- HourlyDispatch/raw -> data_raw (8760h resolution, feeds rolling runs)
+- HourlyDispatch/scaled_long_term -> data_scaled (long-term-corrected,
+  aggregated resolution, feeds fullyear runs)
+- CapDev/{raw,scaled_long_term,scaled_full_year} -> capdev_raw/
+  capdev_scaled_long_term/capdev_scaled_full_year - investment-resolution
+  timesteps (the CapDev_timesteps_to_keep subset from
+  config/weatheryear.yml, far coarser than HourlyDispatch's). Nothing in
+  this pipeline reads these yet (weather year runs never re-invest, see
+  docs/adr/0013) - kept anyway for a possible future weather-year-aware
+  investment run, rather than silently discarded.
+
 Only .inc files are copied (not the .csv siblings in the same source
 folders - Balmorel never reads those). See docs/adr/0014.
 
@@ -37,12 +47,14 @@ import click
 #          1. Functions           #
 # ------------------------------- #
 
-# (source subfolder under <raw-dir>/<year>/to_balmorel/HourlyDispatch/,
-# destination subfolder under --output-dir) - see docs/adr/0014 and
-# CONTEXT.md's "weatheryeardata".
+# (source path under <raw-dir>/<year>/to_balmorel/, destination subfolder
+# under --output-dir) - see docs/adr/0014 and CONTEXT.md's "weatheryeardata".
 _VARIANTS = [
-    ("raw", "data_raw"),
-    ("scaled_long_term", "data_scaled"),
+    ("HourlyDispatch/raw", "data_raw"),
+    ("HourlyDispatch/scaled_long_term", "data_scaled"),
+    ("CapDev/raw", "capdev_raw"),
+    ("CapDev/scaled_long_term", "capdev_scaled_long_term"),
+    ("CapDev/scaled_full_year", "capdev_scaled_full_year"),
 ]
 
 
@@ -73,18 +85,18 @@ def copy_variant(source_dir: Path, dest_dir: Path) -> int:
     "--output-dir",
     type=str,
     default="scripts/Balmorel/weatheryeardata",
-    help="Where to write data_raw/<year>/ and data_scaled/<year>/.",
+    help="Where to write each variant's <year>/ subfolder - see _VARIANTS.",
 )
 def main(year: int, raw_dir: str, output_dir: str):
-    hourly_dispatch = Path(raw_dir) / str(year) / "to_balmorel" / "HourlyDispatch"
-    if not hourly_dispatch.exists():
+    to_balmorel = Path(raw_dir) / str(year) / "to_balmorel"
+    if not to_balmorel.exists():
         raise click.ClickException(
-            f"{hourly_dispatch} not found - run generate_weather_year_inputs.py --year {year} first."
+            f"{to_balmorel} not found - run generate_weather_year_inputs.py --year {year} first."
         )
 
     output_path = Path(output_dir)
-    for source_name, dest_name in _VARIANTS:
-        source_dir = hourly_dispatch / source_name
+    for source_subpath, dest_name in _VARIANTS:
+        source_dir = to_balmorel / source_subpath
         dest_dir = output_path / dest_name / str(year)
         count = copy_variant(source_dir, dest_dir)
         print(f"Weather year {year}: copied {count} .inc file(s) from {source_dir} to {dest_dir}")

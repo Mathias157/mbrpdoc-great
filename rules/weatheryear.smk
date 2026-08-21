@@ -12,10 +12,12 @@ CONTEXT.md's "Weather year"). Run manually:
 """
 YEARS = list(range(1982, 2021))  # 1982-2020, see CONTEXT.md's "Weather year"
 
+# Must match clean_weather_year_inputs.py's own _VARIANTS list.
+VARIANTS = ["data_raw", "data_scaled", "capdev_raw", "capdev_scaled_long_term", "capdev_scaled_full_year"]
+
 rule all:
     input:
-        expand("scripts/Balmorel/weatheryeardata/data_raw/{year}", year=YEARS),
-        expand("scripts/Balmorel/weatheryeardata/data_scaled/{year}", year=YEARS),
+        expand("scripts/Balmorel/weatheryeardata/{variant}/{year}", variant=VARIANTS, year=YEARS),
 
 rule generate_weather_year_inputs:
     message: "Generate raw weather year {wildcards.year} inputs via pybalmorel WEATHERYEAR."
@@ -34,7 +36,6 @@ rule clean_weather_year_inputs:
         raw="data/weatheryear_raw/{year}/to_balmorel",
         script="scripts/preprocessing/clean_weather_year_inputs.py",
     output:
-        raw_dir=directory("scripts/Balmorel/weatheryeardata/data_raw/{year}"),
-        scaled_dir=directory("scripts/Balmorel/weatheryeardata/data_scaled/{year}"),
+        [directory(f"scripts/Balmorel/weatheryeardata/{variant}/{{year}}") for variant in VARIANTS],
     shell:
         "python {input.script} --year {wildcards.year} --raw-dir data/weatheryear_raw --output-dir scripts/Balmorel/weatheryeardata"
