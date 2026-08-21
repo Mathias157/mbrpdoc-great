@@ -37,6 +37,9 @@ mechanism, not assumed):
   season, time) cell independently. INDUSTRY_DE_VAR_T/INDUSTRY_DH_VAR_T
   are NOT weather-dependent and are deliberately left untouched (base
   default keeps being used).
+- FILES_NEEDING_T001_DEDUP (currently just WTRRSVAR_S_WY.inc): workaround
+  for an upstream pybalmorel WEATHERYEAR bug that gives this (AAA,SSS)-only
+  parameter a spurious T dimension. Applied on top of RENAME_FILES.
 
 Only .inc files are copied - not the .csv siblings in the same source
 folders (Balmorel never reads those), and not COP_WY_air_air.inc/
@@ -98,6 +101,19 @@ CONCAT_FILES = {
     "DH_VAR_T.inc": ["DH_VAR_T_RESIDENTIAL.inc", "DH_VAR_T_RESH.inc", "DH_VAR_T_TERTIARY.inc"],
 }
 
+# Workaround for an upstream pybalmorel WEATHERYEAR bug (see docs/adr/0015):
+# WTRRSVAR_S is a (AAA,SSS)-only parameter (base/data/WTRRSVAR_S.inc has no T
+# index), but WEATHERYEAR's export gives every row a spurious 'T001'..'T168'
+# T-dimension, repeating the same S-level value across every T instead of
+# writing it once. Drop until a pybalmorel patch lands: keep only each row's
+# T001 copy, then strip the ', 'T001'' index entirely.
+FILES_NEEDING_T001_DEDUP = {"WTRRSVAR_S_WY.inc"}
+
+
+def _dedup_t001(text: str) -> str:
+    kept_lines = (line for line in text.splitlines(keepends=True) if "T001" in line)
+    return "".join(kept_lines).replace(", 'T001'", "")
+
 
 def copy_variant(source_dir: Path, dest_dir: Path) -> int:
     """Applies PASSTHROUGH_FILES/RENAME_FILES/CONCAT_FILES against every
@@ -117,7 +133,10 @@ def copy_variant(source_dir: Path, dest_dir: Path) -> int:
     for source_name, dest_name in RENAME_FILES.items():
         source_file = source_dir / source_name
         if source_file.exists():
-            shutil.copy2(source_file, dest_dir / dest_name)
+            if source_name in FILES_NEEDING_T001_DEDUP:
+                (dest_dir / dest_name).write_text(_dedup_t001(source_file.read_text()))
+            else:
+                shutil.copy2(source_file, dest_dir / dest_name)
             written += 1
 
     for dest_name, source_names in CONCAT_FILES.items():

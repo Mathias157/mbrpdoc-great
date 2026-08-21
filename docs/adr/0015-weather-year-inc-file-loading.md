@@ -88,6 +88,18 @@ year-independent - both written directly by
   override check only cares that the file *exists*, not that it has
   content, so an empty (comment-only) file is a valid, deliberate no-op.
 
+Separately, `WTRRSVAR_S_WY.inc`'s content itself is wrong upstream, not just
+misnamed: `WTRRSVAR_S` is `(AAA,SSS)`-only (`base/data/WTRRSVAR_S.inc` has
+no T index - reservoir inflow varies by season, not by hour), but
+`pybalmorel`'s `WEATHERYEAR` class exports it with a spurious `'T001'` ..
+`'T168'` T-dimension, repeating the same S-level value across every T
+instead of writing it once (confirmed: values are identical across T for a
+given area/season, unlike the genuinely T-varying `WTRRRVAR_T`). Worked
+around in `clean_weather_year_inputs.py`'s `FILES_NEEDING_T001_DEDUP`
+(2026-08-21) rather than fixed upstream: keep only each row's `T001` copy,
+then strip the `, 'T001'` index. Remove this workaround once a `pybalmorel`
+patch exports `WTRRSVAR_S` correctly.
+
 ## Consequences
 
 - `clean_weather_year_inputs.py` now silently drops any `.inc` file not
