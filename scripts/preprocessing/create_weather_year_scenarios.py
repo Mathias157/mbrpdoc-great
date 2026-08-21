@@ -24,6 +24,17 @@ pre-created here either):
   WY folder never has its own simex_INV, there's no investment run to
   produce one).
 - `config.sh`: copied verbatim from the source scenario.
+- `data/SEASONALCOP_COP_VAR_T.inc`: a static wrapper (identical for every
+  weather year, so written directly rather than templated per year) that
+  makes `base/addons/seasonalCOP/bb4/seasonalCOP_pardefine.inc`'s existing
+  scenario-override check pick up the weather-year-varying air-source COP
+  files (already staged into this same `data/` folder by the WY job
+  scripts' bulk copy from weatheryeardata) alongside the fixed,
+  non-weather-dependent ground-source COP data. See docs/adr/0015.
+- `data/INDIVUSERS_DH_VAR_T.inc`: written empty. Suppresses the
+  `INDIVUSERS_DH_VAR_T` addon (not weather-year aware and deliberately not
+  wanted for weather year runs) instead of silently falling back to the
+  source scenario's non-weather-year data - see docs/adr/0015.
 
 Never touches HPC or Snakemake - this is local scaffolding, meant to be
 `rsync`'d up (`pixi run sync-up`) and run via `jobs/slurm/submit_weather_years.sh`
@@ -58,6 +69,38 @@ MODEL_FILES_TO_COPY = [
     "balopt_roll.opt",
 ]
 
+# Ground-water heat pump COP is not weather-year dependent (the ground
+# stays at a roughly stable temperature year-round, unlike air) - always
+# loaded from the fixed base file, reassigned from its raw COP_VAR_T1 form
+# (TABLE + reassign, like WND_VAR_T.inc's own chain) *before* the two
+# weather-year-varying air-source files, whose lines are direct
+# `COP_VAR_T(...) = value;` assignments to specific (area, generator,
+# season, time) cells - if reassigning ground-wtr ran *after* them, its
+# unconditional `COP_VAR_T(IA,G,SSS,TTT) = COP_VAR_T1(...)` would zero out
+# every cell COP_VAR_T1 doesn't cover, wiping the air-source assignments
+# that were just made. See docs/adr/0015.
+_SEASONALCOP_COP_VAR_T_WRAPPER = """\
+* Weather-year override for COP_VAR_T (seasonalCOP addon) - written by
+* create_weather_year_scenarios.py, see docs/adr/0015. Ground-water COP is
+* not weather-year dependent, so it always comes from the fixed base file;
+* air-source COP (air-air, air-water) comes from this weather year's own
+* data, staged into this same folder by the WY job scripts' bulk copy from
+* weatheryeardata.
+$include '../../base/data/SEASONALCOP_COP_GROUND-WTR.inc';
+$include '../../base/data/SEASONALCOP_COP_VAR_T_GROUND-WTR.inc';
+COP_VAR_T(IA,G,SSS,TTT) = COP_VAR_T1(SSS,TTT,IA,G);
+COP_VAR_T1(SSS,TTT,IA,G)=0;
+
+$include '../data/SEASONALCOP_COP_VAR_T_WY_air_air.inc';
+$include '../data/SEASONALCOP_COP_VAR_T_WY_air_water.inc';
+"""
+
+_INDIVUSERS_DH_VAR_T_EMPTY = """\
+* Deliberately empty - weather year runs suppress INDIVUSERS_DH_VAR_T
+* rather than falling back to the source scenario's non-weather-year-aware
+* data. See docs/adr/0015.
+"""
+
 
 def create_weather_year_folder(balmorel_path: Path, scenario: str, year: int) -> Path:
     """Scaffolds `<balmorel_path>/<scenario>_WY<year>/` from `<scenario>`'s
@@ -83,6 +126,12 @@ def create_weather_year_folder(balmorel_path: Path, scenario: str, year: int) ->
         shutil.copy2(source / "model" / filename, target / "model" / filename)
 
     shutil.copy2(source / "config.sh", target / "config.sh")
+
+    (target / "data" / "SEASONALCOP_COP_VAR_T.inc").write_text(
+        _SEASONALCOP_COP_VAR_T_WRAPPER
+    )
+    (target / "data" / "INDIVUSERS_DH_VAR_T.inc").write_text(_INDIVUSERS_DH_VAR_T_EMPTY)
+
     return target
 
 
