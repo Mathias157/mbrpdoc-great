@@ -3,19 +3,17 @@ Clean Weather-Year Inputs Down to Balmorel-Ready .inc Files
 
 For one historical weather year, trims generate_weather_year_inputs.py's
 full raw output (Excel review files, per-technology stats, ...) down to
-just the .inc file sets a weather year run - or a future weather-year-aware
-investment run - could need, copying them into the shared, gitignored
-scripts/Balmorel/weatheryeardata/<variant>/<year>/ that
+just the .inc file sets a weather year run needs, copying them into the
+shared, gitignored scripts/Balmorel/weatheryeardata/<variant>/<year>/ that
 jobs/slurm/fullyear_2050_wy.sh/rolling_2050_wy.sh read from at run time:
 
-- HourlyDispatch/raw -> data_raw (8760h resolution, feeds rolling runs)
-- HourlyDispatch/scaled_long_term -> data_scaled (long-term-corrected,
-  aggregated resolution, feeds fullyear runs)
-- CapDev/{raw,scaled_long_term,scaled_full_year} -> capdev_raw/
-  capdev_scaled_long_term/capdev_scaled_full_year - investment-resolution
-  timesteps. Nothing in this pipeline reads these yet (weather year runs
-  never re-invest, see docs/adr/0013) - kept anyway for a possible future
-  weather-year-aware investment run.
+- CapDev/raw -> data_raw (feeds rolling runs)
+- CapDev/scaled_full_year -> data_scaled (feeds fullyear runs)
+
+Deliberately from CapDev, not HourlyDispatch - confirmed with the user
+(2026-08-21) that HourlyDispatch's output isn't needed here at all, so it's
+not read or copied. CapDev/scaled_long_term is likewise not copied - not
+needed by either job script.
 
 Not a blind copy: `base/model/bb4datainc.inc` only picks up a scenario's
 own `data/<NAME>.inc` override if the *filename* matches exactly what it
@@ -73,11 +71,8 @@ import click
 # Source path under <raw-dir>/<year>/to_balmorel/, destination subfolder
 # under --output-dir - see docs/adr/0014 and CONTEXT.md's "weatheryeardata".
 _VARIANTS = [
-    ("HourlyDispatch/raw", "data_raw"),
-    ("HourlyDispatch/scaled_long_term", "data_scaled"),
-    ("CapDev/raw", "capdev_raw"),
-    ("CapDev/scaled_long_term", "capdev_scaled_long_term"),
-    ("CapDev/scaled_full_year", "capdev_scaled_full_year"),
+    ("CapDev/raw", "data_raw"),
+    ("CapDev/scaled_full_year", "data_scaled"),
 ]
 
 # See module docstring and docs/adr/0015 for why each of these three is

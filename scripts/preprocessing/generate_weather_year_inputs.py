@@ -11,9 +11,9 @@ previously lived only as a hand-run process into the sibling pybalmorel
 repo's results/ folder (see docs/adr/0014).
 
 This is intentionally the "raw" half only - most of what WEATHERYEAR writes
-(Excel review files, per-technology stats, CapDev) is never used downstream.
-clean_weather_year_inputs.py trims one year's output from here down to just
-the HourlyDispatch raw/scaled_long_term .inc files a weather year run
+(Excel review files, per-technology stats, HourlyDispatch) is never used
+downstream. clean_weather_year_inputs.py trims one year's output from here
+down to just the CapDev raw/scaled_full_year .inc files a weather year run
 actually needs, into scripts/Balmorel/weatheryeardata/. Meant to be driven
 by rules/weatheryear.smk (one Snakemake job per year, wildcarded on --year,
 kept out of the main Snakefile DAG - see docs/adr/0014) rather than invoked

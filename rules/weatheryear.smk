@@ -13,7 +13,7 @@ CONTEXT.md's "Weather year"). Run manually:
 YEARS = list(range(1982, 2021))  # 1982-2020, see CONTEXT.md's "Weather year"
 
 # Must match clean_weather_year_inputs.py's own _VARIANTS list.
-VARIANTS = ["data_raw", "data_scaled", "capdev_raw", "capdev_scaled_long_term", "capdev_scaled_full_year"]
+VARIANTS = ["data_raw", "data_scaled"]
 
 rule all:
     input:
