@@ -37,6 +37,7 @@ pyxlsb = ">=1.0.10,<2"
 cmcrameri = ">=1.9,<2"
 openpyxl = ">=3.1.5,<4"
 premailer = ">=3.10.0,<4"
+xlsxwriter = "*"
 
 [activation.env]
 GAMS_SYSTEM_DIR = "/opt/gams/53"
@@ -47,6 +48,7 @@ LOCAL_BALMOREL_DIR = "scripts/Balmorel"
 run = "snakemake --cores 4"
 test = "snakemake test --cores 4"
 postprocess = "snakemake --snakefile rules/postprocess.smk --cores 4"
+weatheryear = "snakemake --snakefile rules/weatheryear.smk --cores 4"
 dag = "snakemake dag --cores 1"
 clean = "snakemake clean"
 "clean-all" = "snakemake clean && rm -rf build/"
@@ -69,6 +71,11 @@ args = ["scenario", {arg="suffix", default="*"}]
 cmd = "rsync -avzu 'mberos@sophia.dtu.dk:/home/mberos/Repos/GREAT/{{ scenario }}/model/MainResults{{ suffix }}.gdx' scripts/Balmorel/{{ scenario }}/model/"
 description = "Get MainResults from a scenario folder (first arg) with a certain suffix (second arg, defaults to *)"
 
+[tasks.create-weather-year-scenarios]
+args = ["scenario"]
+cmd = "python scripts/preprocessing/create_weather_year_scenarios.py --scenario {{ scenario }}"
+description = "Scaffold <scenario>_WY<year>/ folders (1982-2020) for weather year runs off <scenario>'s simex_INV (see docs/adr/0013/0014)"
+
 [pypi-dependencies]
-pybalmorel = ">=1.1.9, <2"
+pybalmorel = ">=1.2.1, <2"
 python-decouple = ">=3.8, <4"
