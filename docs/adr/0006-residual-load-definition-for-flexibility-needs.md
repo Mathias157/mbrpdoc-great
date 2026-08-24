@@ -1,6 +1,6 @@
 # Define residual load's demand/supply components for flexibility-need estimation
 
-**Status**: accepted
+**Status**: superseded by [0017](0017-correlation-based-flexibility-provision.md)
 
 ## Context
 
@@ -21,7 +21,7 @@ both needed a concrete definition against this model's own data:
   component driven by heat demand outweighs the available flexibility from
   building thermal inertia"), but whether that holds in *this* model's
   parameterisation is a modelling judgement call, not a settled fact -
-  unlike `EXOGENOUS` (pure household/industry/agriculture/datacentre load),
+  unlike `EXOGENOUS` (pure household/industry/datacentre load),
   which is unambiguously inelastic.
 - Non-dispatchable supply has a precedent already in this codebase:
   `VRE_CERT_AS.inc` groups wind, solar, and run-of-river hydro (`GHYRR`) as

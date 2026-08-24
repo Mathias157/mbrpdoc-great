@@ -11,12 +11,16 @@ category (membership fixed from a reference scenario, see docs/adr/0004),
 and per country. Heat and hydrogen residual load is non-dispatchable demand
 only, never netted against a non-dispatchable supply (see docs/adr/0009).
 
-The same hierarchical decomposition is also applied to each flexibility
-option's own commodity-signed net hourly dispatch (see
+Each flexibility option's own commodity-signed net hourly dispatch (see
 flex_option_metrics.FLEX_OPTIONS, CONTEXT.md's "Commodity-signed flex
-value", and docs/adr/0008), per commodity it has a view on, to show what
-timescale it actually operates at, alongside residual load's own
-Daily/Weekly/Annual bars (see docs/adr/0007).
+value", and docs/adr/0008) is decomposed the same hierarchical way, but
+signed via Geis et al. (2026)'s correlation-based "flexibility provision"
+method (docs/adr/0017) rather than a fixed per-option sign: each option's
+own deviation curve is weighted by the *system's* own deviation sign (from
+residual load, not the option's own), making its contribution exactly
+additive with residual load's own Daily/Weekly/Annual need - including an
+explicit "Other" catch-all for whatever's left unattributed, per group and
+commodity.
 
 Compute-only - writes flexibility_needs.csv and nothing else. Reading the
 GDX results this needs (particularly PRO_YCRAGFST) is the expensive part of
@@ -46,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "Balmorel" / "analysis"))
 
 import click
+import numpy as np
 import pandas as pd
 from decouple import config
 from pybalmorel import Balmorel
@@ -82,13 +87,29 @@ NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [
     "HYDRO-RUN-OF-RIVER",
 ]
 
-# EL_DEMAND_YCRST's own VARIABLE_CATEGORY values that may count as
-# non-dispatchable demand - see docs/adr/0006 for why EXOGENOUS is the only
-# default and ENDOGENOUS_ELECT2HEAT/ENDO_EV are opt-in via --demand-categories.
-# Electricity-only: heat and hydrogen always use EXOGENOUS only (see
-# docs/adr/0009) - no equivalent judgement call has been identified for them
-# the way ENDOGENOUS_ELECT2HEAT/ENDO_EV are for electricity.
-DEMAND_CATEGORY_CHOICES = ["EXOGENOUS", "ENDOGENOUS_ELECT2HEAT", "ENDO_EV"]
+# EL_DEMAND_YCRST's own VARIABLE_CATEGORY values with no flexibility-option
+# home - EXOGENOUS (pure inelastic household/industry/agriculture/datacentre
+# load) plus technical/parasitic categories confirmed present and nonzero in
+# this dataset (checked directly against a cached EL_DEMAND_YCRST.pkl, not
+# guessed): DIST_LOSSES/TRANS_LOSSES (grid losses - not dispatched),
+# ENDO_CCS (CCS parasitic load - not a tracked flex option), ENDO_BIOMETHANE
+# (negligible but real). Fixed, not user-configurable: every EL_DEMAND_YCRST
+# category must land in exactly one place - here, or exactly one flex
+# option's own signed dispatch - so flexibility *provision*'s additivity
+# holds (see docs/adr/0017, which supersedes 0006's `--demand-categories`
+# flag). `ENDOGENOUS_ELECT2HEAT`/`ENDO_H2`/`ENDO_EV`'s flexible share are
+# therefore always excluded here - a flex option always claims them.
+ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES = (
+    "EXOGENOUS",
+    "DIST_LOSSES",
+    "TRANS_LOSSES",
+    "ENDO_CCS",
+    "ENDO_BIOMETHANE",
+)
+# Heat/hydrogen's own technical-loss-equivalent categories are unverified
+# against live data (no local .gdx_cache for H_DEMAND_YCRAST/H2_DEMAND_YCRST
+# yet) - EXOGENOUS only for now, to be extended the same way once checked
+# (see docs/adr/0017).
 NON_ELECTRICITY_DEMAND_CATEGORIES = ("EXOGENOUS",)
 
 NEEDS_COLUMNS = [
@@ -109,10 +130,14 @@ _EMPTY_HOURLY = pd.DataFrame(columns=["Country", "Season", "Time", "Value"])
 # an hourly Season/Time dimension - every kind except "system_only"
 # (Demand response's DR_FLEX_Y has no "ST" counterpart in this dataset's own
 # naming convention for "already summed over Season/Time", see pybalmorel's
-# formatting.py). V2G ("net_category", EL_DEMAND_YCRST) is decomposable here
-# even though it wasn't originally (docs/adr/0007) - EL_DEMAND_YCRST does
-# have an hourly counterpart, unlike the V2G_FLEX_YCR symbol it replaced
-# (see docs/adr/0008).
+# formatting.py). Demand response therefore never becomes a named row here -
+# it passively falls into the "Other" catch-all instead (see
+# `flexibility_provision`/docs/adr/0017). EV charging/V2G
+# ("net_category_signed", EL_DEMAND_YCRST) are decomposable here even though
+# V2G wasn't originally (docs/adr/0007) - EL_DEMAND_YCRST does have an
+# hourly counterpart, unlike the V2G_FLEX_YCR symbol it replaced (see
+# docs/adr/0008) - and that hourly resolution is now also what the
+# demand/supply split itself is computed from (docs/adr/0016).
 HOURLY_FLEX_OPTIONS = [
     (flex_option, commodity, spec)
     for flex_option, commodities in FLEX_OPTIONS.items()
@@ -120,22 +145,73 @@ HOURLY_FLEX_OPTIONS = [
     if spec["kind"] != "system_only"
 ]
 
-# `flexibility_needs()` is sign-invariant by construction (built from
-# |deviation from mean|, see its docstring) - it can't itself tell a
-# demand-side option's bar from a supply-side one. For flex_option_system/
-# flex_option_category rows only (never residual load's own system/category
-# rows), `main()` reattaches a demand/supply sign to flex_need_twh after the
-# fact, purely for display (stacking below vs above the zero line - see
-# `_stack_bars`) - using the same "kind" convention flex_option_metrics.py's
-# FLEX_OPTIONS docstring already documents ("consumption": negative/
-# demand-side electricity draw). "production"/"peaker" are always
-# supply-side so are left positive; "storage"/"transmission"/"net_category"
-# are genuinely bidirectional (not a fixed demand- or supply-side role) so
-# are also left as-is (positive, i.e. stacked on the supply side) rather
-# than signed by their often near-zero net-period sum (e.g. storage nets
-# slightly negative from round-trip losses, which would misleadingly stack
-# it as "demand-side"). See docs/adr/0011.
-_DEMAND_SIDE_KINDS = {"consumption"}
+
+def _filter_area(df: pd.DataFrame, spec: dict) -> pd.DataFrame:
+    """Area-substring filter for options split by deployment context (e.g.
+    PtH's Industrial/Individual/District split, see
+    docs/adr/0017) - "area_contains" keeps only matching rows,
+    "area_excludes" drops rows matching any of a list of substrings. No-op
+    if spec has neither key. Same logic as flex_option_metrics.py's own
+    `_filter_area` - kept as a separate copy since this module only imports
+    that one's shared FLEX_OPTIONS/STORAGE_CHARGE_CATEGORIES, not its
+    private helpers."""
+    if "area_contains" in spec:
+        return df[df["Area"].str.contains(spec["area_contains"])]
+    if "area_excludes" in spec:
+        return df[~df["Area"].str.contains("|".join(spec["area_excludes"]))]
+    return df
+
+
+def _load_ev_dumb_fraction() -> pd.DataFrame:
+    """(Year, Region, dumb_fraction) parsed from EV_BEV_dumb.inc - the
+    year x region fraction of EV charging that's dumb/inflexible (a lower
+    bound on VEV_G2V_BEV, see docs/adr/0016/0017). EV_PHEV_dumb.inc carries
+    identical values to EV_BEV_dumb.inc in this dataset (checked directly)
+    so only one is read - the aggregated ENDO_EV series has no BEV/PHEV
+    split to apply them separately against anyway. Does not apply the
+    RollingSeasons=yes x0.1 adjustment EV_BEV_dumb.inc's last line encodes -
+    a further reduction on an already-negligible (0.001 in 2050) fraction,
+    skipped rather than plumbing rolling/fullyear run-type detection through
+    for a sub-0.1% effect."""
+    path = Path(__file__).parent.parent / "Balmorel" / "base" / "data" / "EV_BEV_dumb.inc"
+    lines = path.read_text().splitlines()
+    header_idx = next(i for i, line in enumerate(lines) if line.strip().startswith("TABLE"))
+    regions = lines[header_idx + 1].split()
+    rows = []
+    for line in lines[header_idx + 2:]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";") or stripped.startswith("$"):
+            break
+        year, *values = stripped.split()
+        rows.extend((year, region, float(value)) for region, value in zip(regions, values))
+    return pd.DataFrame(rows, columns=["Year", "Region", "dumb_fraction"])
+
+
+def _split_ev_dumb(
+    el: pd.DataFrame, dumb_fraction: pd.DataFrame, scenario_name: str, year: str
+) -> tuple:
+    """(dumb_hourly, smart_hourly) - raw ENDO_EV (Country, Region, Season,
+    Time, Value; demand-table convention, positive = more demand) split by
+    `dumb_fraction` (see `_load_ev_dumb_fraction`). `dumb_hourly` is the
+    locked-in/inflexible share, taken only from the net-charging part of
+    each Region-hour (`Value` clipped to >=0 first - a net-discharging
+    Region-hour, i.e. net V2G, has no "dumb charging" to lock in) - this
+    moves into residual load's non-dispatchable demand. `smart_hourly` is
+    the remainder, still in demand-table convention, that stays genuinely
+    flexible for the EV charging/V2G flex options (see docs/adr/0017)."""
+    raw = el[
+        (el["Scenario"] == scenario_name)
+        & (el["Year"].astype(str) == str(year))
+        & (el["Category"] == "ENDO_EV")
+    ]
+    fraction_this_year = dumb_fraction[dumb_fraction["Year"] == str(year)][["Region", "dumb_fraction"]]
+    merged = raw.merge(fraction_this_year, on="Region", how="left")
+    merged["dumb_fraction"] = merged["dumb_fraction"].fillna(0.0)
+    dumb_share = merged["Value"].clip(lower=0) * merged["dumb_fraction"]
+    cols = ["Country", "Region", "Season", "Time"]
+    dumb_hourly = merged[cols].assign(Value=dumb_share)
+    smart_hourly = merged[cols].assign(Value=merged["Value"] - dumb_share)
+    return dumb_hourly, smart_hourly
 
 
 def _get_result_cached(
@@ -204,7 +280,7 @@ def country_residual_load(demand: pd.DataFrame, supply: pd.DataFrame) -> pd.Data
         on=["Country", "Season", "Time"],
         how="outer",
         suffixes=("_demand", "_supply"),
-    ).fillna(0)
+    ).fillna(0).infer_objects(copy=False)
     merged["Value"] = merged["Value_demand"] - merged["Value_supply"]
     return merged[["Country", "Season", "Time", "Value"]]
 
@@ -221,9 +297,25 @@ def _net_hourly(supply: pd.DataFrame, demand: pd.DataFrame) -> pd.DataFrame:
         on=["Country", "Season", "Time"],
         how="outer",
         suffixes=("_supply", "_demand"),
-    ).fillna(0)
+    ).fillna(0).infer_objects(copy=False)
     merged["Value"] = merged["Value_supply"] - merged["Value_demand"]
     return merged[["Country", "Season", "Time", "Value"]]
+
+
+def _period_means(hourly: pd.DataFrame) -> pd.DataFrame:
+    """`hourly` (Season, Time, Value) with Day/daily_mean/weekly_mean/
+    annual_mean columns added, one row per hour - the shared building block
+    for `flexibility_needs()` (sign-invariant need) and `flex_sign()`/
+    `flexibility_provision()` (Geis et al. 2026's correlation-based signed
+    decomposition, see docs/adr/0017)."""
+    hour_in_week = hourly["Time"].str[1:].astype(int)
+    day = hourly["Season"] + "-D" + (((hour_in_week - 1) // 24) + 1).astype(str)
+
+    working = hourly.assign(Day=day)
+    working["daily_mean"] = working.groupby("Day")["Value"].transform("mean")
+    working["weekly_mean"] = working.groupby("Season")["Value"].transform("mean")
+    working["annual_mean"] = working["Value"].mean()
+    return working
 
 
 def flexibility_needs(hourly: pd.DataFrame) -> dict:
@@ -241,14 +333,7 @@ def flexibility_needs(hourly: pd.DataFrame) -> dict:
     and the next coarser one, always summed over the full hourly grid so
     variability already captured at a finer timescale isn't double-counted -
     see docs/adr/0006."""
-    hour_in_week = hourly["Time"].str[1:].astype(int)
-    day = hourly["Season"] + "-D" + (((hour_in_week - 1) // 24) + 1).astype(str)
-
-    working = hourly.assign(Day=day)
-    working["daily_mean"] = working.groupby("Day")["Value"].transform("mean")
-    working["weekly_mean"] = working.groupby("Season")["Value"].transform("mean")
-    annual_mean = working["Value"].mean()
-
+    working = _period_means(hourly)
     mwh_to_twh = 1e-6
     return {
         "Daily": 0.5
@@ -257,7 +342,53 @@ def flexibility_needs(hourly: pd.DataFrame) -> dict:
         "Weekly": 0.5
         * (working["daily_mean"] - working["weekly_mean"]).abs().sum()
         * mwh_to_twh,
-        "Annual": 0.5 * (working["weekly_mean"] - annual_mean).abs().sum() * mwh_to_twh,
+        "Annual": 0.5 * (working["weekly_mean"] - working["annual_mean"]).abs().sum() * mwh_to_twh,
+    }
+
+
+def flex_sign(hourly: pd.DataFrame) -> pd.DataFrame:
+    """(Season, Time, Daily, Weekly, Annual) - one group's (system/category)
+    own FlexSign at each timescale, from its own residual load (Geis et al.
+    2026's FlexSign^{l|h}(t) = sign(FlexCurve^{l|h}(t)), see docs/adr/0017).
+    Used to weight every flex option's own deviation curve in
+    `flexibility_provision()` - the *system's* sign, not the option's own."""
+    working = _period_means(hourly)
+    return pd.DataFrame({
+        "Season": working["Season"],
+        "Time": working["Time"],
+        "Daily": np.sign(working["Value"] - working["daily_mean"]),
+        "Weekly": np.sign(working["daily_mean"] - working["weekly_mean"]),
+        "Annual": np.sign(working["weekly_mean"] - working["annual_mean"]),
+    })
+
+
+def flexibility_provision(hourly: pd.DataFrame, sign: pd.DataFrame) -> dict:
+    """Daily/Weekly/Annual flexibility *provision* (TWh) of one flex
+    option's own hourly series, weighted by `sign` (that group's own
+    FlexSign, from `flex_sign()` on its residual load) rather than a fixed
+    per-option sign - Geis et al. (2026) eq. 3-4. Positive when the
+    option's own deviation aligns with what the system needs at that hour,
+    negative when it opposes, regardless of the option's nominal
+    supply/demand role. Exactly additive with `flexibility_needs()` across
+    every tracked option plus an explicit "Other" residual, by construction
+    (Geis's Appendix A.1) - see docs/adr/0017."""
+    working = (
+        _period_means(hourly)
+        .merge(sign, on=["Season", "Time"], how="left")
+        .fillna(0)
+        .infer_objects(copy=False)
+    )
+    mwh_to_twh = 1e-6
+    return {
+        "Daily": 0.5
+        * ((working["Value"] - working["daily_mean"]) * working["Daily"]).sum()
+        * mwh_to_twh,
+        "Weekly": 0.5
+        * ((working["daily_mean"] - working["weekly_mean"]) * working["Weekly"]).sum()
+        * mwh_to_twh,
+        "Annual": 0.5
+        * ((working["weekly_mean"] - working["annual_mean"]) * working["Annual"]).sum()
+        * mwh_to_twh,
     }
 
 
@@ -273,6 +404,18 @@ def _needs_rows(
     if hourly.empty:
         return pd.DataFrame(columns=NEEDS_COLUMNS)
     needs = flexibility_needs(hourly)
+    return _needs_rows_from_dict(needs, scenario_name, year, group_type, group, commodity, flex_option)
+
+
+def _needs_rows_from_dict(
+    needs: dict,
+    scenario_name: str,
+    year: str,
+    group_type: str,
+    group: str,
+    commodity: str,
+    flex_option: str = "",
+) -> pd.DataFrame:
     return pd.DataFrame({
         "Scenario": scenario_name,
         "Year": year,
@@ -364,17 +507,23 @@ def flex_option_hourly_net(
     region_to_country: dict,
     scenario_name: str,
     year: str,
+    ev_smart_hourly: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """(Country, Season, Time, Value): one flex option's own commodity-signed
     net hourly dispatch (supply minus demand - positive when it injects into
     `commodity`'s balance, negative when it withdraws, see CONTEXT.md's
     "Commodity-signed flex value" and docs/adr/0008) - the same shape as
-    `country_hourly_supply`'s output, so `flexibility_needs()` decomposes it
-    the same hierarchical way as residual load, to show what timescale that
-    option actually operates at. Only called for `HOURLY_FLEX_OPTIONS`.
-    `demand_symbols` is {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2} -
-    each commodity's own hourly non-dispatchable-demand symbol, reused here
-    to source storage's charging side and V2G's net side."""
+    `country_hourly_supply`'s output, so `flexibility_needs()`/
+    `flexibility_provision()` decompose it the same hierarchical way as
+    residual load. Only called for `HOURLY_FLEX_OPTIONS`. `demand_symbols`
+    is {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2} - each commodity's own
+    hourly non-dispatchable-demand symbol, reused here to source storage's
+    charging side, electrolysers' consumption (via "hourly_category"), and
+    EV's net side. `ev_smart_hourly` - only used for
+    `spec["category"] == "ENDO_EV"` - is the flexible/smart residual of
+    ENDO_EV after `_split_ev_dumb` removes the dumb/inflexible share (see
+    docs/adr/0017); when None, falls back to the raw category (used for
+    commodities/specs where the split doesn't apply)."""
     kind = spec["kind"]
 
     # Boolean indexing throughout, not `.query("... == @scenario_name ...")`
@@ -397,17 +546,32 @@ def flex_option_hourly_net(
             sub = sub[~sub["Fuel"].isin(spec["exclude_fuels"])]
         if spec.get("exclude_backup"):
             sub = sub[~sub["Generation"].str.contains("BACKUP")]
+        sub = _filter_area(sub, spec)
         return sub.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
 
     if kind == "production":
         return _net_hourly(_tech_rows(pro), _EMPTY_HOURLY)
 
     if kind == "consumption":
-        sub = _scenario_year(f_cons)
-        sub = sub[
-            (sub["Technology"].isin(spec["technologies"])) & (sub["Fuel"] == "ELECTRIC")
-        ]
-        demand = sub.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+        if "hourly_category" in spec:
+            # Electrolysers: sourced from EL_DEMAND_YCRST's own ENDO_H2
+            # category rather than F_CONS_YCRAST, guaranteeing by
+            # construction that this exactly offsets what residual load
+            # excludes (see docs/adr/0017) - unlike PtH
+            # below, which needs F_CONS_YCRAST's Area column for its
+            # Industrial/Individual/District split (EL_DEMAND_YCRST has no
+            # Area column to split on).
+            sub = _scenario_year(demand_symbols[commodity])
+            sub = sub[sub["Category"] == spec["hourly_category"]]
+            demand = sub.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+        else:
+            sub = _scenario_year(f_cons)
+            sub = sub[
+                (sub["Technology"].isin(spec["technologies"]))
+                & (sub["Fuel"] == spec.get("fuel", "ELECTRIC"))
+            ]
+            sub = _filter_area(sub, spec)
+            demand = sub.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
         return _net_hourly(_EMPTY_HOURLY, demand)
 
     if kind == "storage":
@@ -433,16 +597,30 @@ def flex_option_hourly_net(
         )
         return _net_hourly(supply, _EMPTY_HOURLY)
 
-    if kind == "net_category":
-        dem = _scenario_year(demand_symbols[commodity])
-        dem = dem[dem["Category"] == spec["category"]]
-        rows = dem.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
-        rows[
-            "Value"
-        ] *= (
-            -1
+    if kind == "net_category_signed":
+        # Split at raw Region-hour resolution, before any Country/Season/
+        # Time aggregation - see flex_option_metrics.py's FLEX_OPTIONS
+        # docstring and docs/adr/0016. Only one already-net GAMS variable
+        # exists (ENDO_EV); clipping approximates gross demand/supply, and
+        # understates whichever side loses a tie within one Region-hour of
+        # simultaneous charging and discharging. `ev_smart_hourly`, when
+        # given, is already the dumb-share-removed residual (see
+        # docs/adr/0017) - still in raw demand-table convention, so the
+        # sign flip/clip below applies unchanged.
+        if spec.get("category") == "ENDO_EV" and ev_smart_hourly is not None:
+            dem = ev_smart_hourly
+        else:
+            dem = _scenario_year(demand_symbols[commodity])
+            dem = dem[dem["Category"] == spec["category"]]
+        dem = dem.assign(
+            Value=dem["Value"] * -1
         )  # demand-table convention ("more demand" = positive) -> "positive = supply"
-        return rows
+        dem = dem.assign(
+            Value=dem["Value"].clip(lower=0)
+            if spec["direction"] == "supply"
+            else dem["Value"].clip(upper=0)
+        )
+        return dem.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
 
     if kind == "peaker":
         backup = backup_production(_scenario_year(pro), commodity=commodity)
@@ -459,18 +637,22 @@ def flex_option_hourly_net(
 
 def build_flex_option_system_table(
     hourly_net: pd.DataFrame,
+    sign: pd.DataFrame,
     flex_option: str,
     commodity: str,
     scenario_name: str,
     year: str,
 ) -> pd.DataFrame:
-    """Daily/Weekly/Annual decomposition of one flex option's own commodity-
-    signed net hourly dispatch, summed across every country - system-wide
-    equivalent of `build_system_table`, but the signal is the option's own
-    operation, not residual load."""
+    """Daily/Weekly/Annual flexibility *provision* (see docs/adr/0017) of one
+    flex option's own commodity-signed net hourly dispatch, summed across
+    every country, weighted by the system's own FlexSign (`sign`, from
+    residual load - see `flex_sign`) rather than a fixed per-option sign -
+    system-wide equivalent of `build_system_table`, but the signal is the
+    option's own operation, not residual load."""
     hourly = hourly_net.groupby(["Season", "Time"])["Value"].sum().reset_index()
-    return _needs_rows(
-        hourly,
+    provision = flexibility_provision(hourly, sign)
+    return _needs_rows_from_dict(
+        provision,
         scenario_name,
         year,
         group_type="flex_option_system",
@@ -483,23 +665,31 @@ def build_flex_option_system_table(
 def build_flex_option_category_table(
     hourly_net: pd.DataFrame,
     category_map: dict,
+    signs: dict,
     flex_option: str,
     commodity: str,
     scenario_name: str,
     year: str,
 ) -> pd.DataFrame:
-    """Daily/Weekly/Annual decomposition of one flex option's own commodity-
-    signed net hourly dispatch, per Combined category - category-level
-    equivalent of `build_category_table`."""
+    """Category-level equivalent of `build_flex_option_system_table` - each
+    category weighted by that category's own FlexSign (`signs[group]`), not
+    a system-wide one, so category bars stay additive to that category's own
+    Total Flexibility Needs line (see docs/adr/0017). Categories with no
+    computed sign (i.e. absent from residual load's own categorization,
+    should not normally happen since both are keyed off the same
+    `category_map`) are skipped rather than raising."""
     categorized = hourly_net.assign(
         combined_category=hourly_net["Country"].map(category_map)
     ).dropna(subset=["combined_category"])
     tables = []
     for group, group_use in categorized.groupby("combined_category"):
+        if group not in signs:
+            continue
         hourly = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
+        provision = flexibility_provision(hourly, signs[group])
         tables.append(
-            _needs_rows(
-                hourly,
+            _needs_rows_from_dict(
+                provision,
                 scenario_name,
                 year,
                 group_type="flex_option_category",
@@ -554,18 +744,20 @@ def build_flex_option_category_table(
     help="Scenario whose Combined category assignment is fixed and reused for every scenario (see docs/adr/0004)",
 )
 @click.option(
-    "--demand-categories",
-    multiple=True,
-    type=click.Choice(DEMAND_CATEGORY_CHOICES),
-    default=("EXOGENOUS",),
-    help="EL_DEMAND_YCRST categories counted as electricity's non-dispatchable demand (see docs/adr/0006). "
-    "Heat and hydrogen always use EXOGENOUS only (see docs/adr/0009).",
-)
-@click.option(
     "--years",
     multiple=True,
     default=(),
     help="Restrict to these target year(s) (e.g. 2050). Default: all found.",
+)
+@click.option(
+    "--scenarios",
+    multiple=True,
+    default=(),
+    help="Restrict to these scenario name(s) (e.g. --scenarios ELN_R2050) for local testing. "
+    "Default ('all', i.e. every fullyear/rolling scenario result found under --balmorel-path) is expensive: "
+    "Balmorel.collect_results() opens a GAMS database per scenario *folder* it locates, not per scenario "
+    "name, regardless of any filtering done afterwards - so this option prunes which folders get located "
+    "in the first place, before collect_results() runs, rather than filtering the resulting DataFrames.",
 )
 @click.option(
     "--overwrite-cache",
@@ -580,8 +772,8 @@ def main(
     output_dir: str,
     categorization_csv: str,
     reference_scenario: str,
-    demand_categories: tuple,
     years: tuple,
+    scenarios: tuple,
     overwrite_cache: bool,
 ):
     output_path = Path(output_dir)
@@ -616,6 +808,20 @@ def main(
         return
 
     model = Balmorel(balmorel_path, gams_system_directory=gams_sysdir)
+    if scenarios:
+        # locate_results() alone is cheap (filenames only, no GDX read -
+        # see AGENTS.md's pybalmorel note) - used here only to resolve
+        # which scenario *folder* each requested scenario name lives in,
+        # so `model.scenarios` can be pruned before collect_results()
+        # re-locates and opens a GAMS database per remaining folder.
+        model.locate_results(suffix_naming_only=True)
+        missing = set(scenarios) - set(model.scname_to_scfolder)
+        if missing:
+            print(f"Requested --scenarios not found, ignoring: {sorted(missing)}")
+        wanted_folders = {
+            model.scname_to_scfolder[s] for s in scenarios if s in model.scname_to_scfolder
+        }
+        model.scenarios = [SC for SC in model.scenarios if SC in wanted_folders]
     model.collect_results(suffix_naming_only=True)
     res = model.results
 
@@ -628,6 +834,7 @@ def main(
     xh2_flow = _get_result_cached(res, "XH2_FLOW_YCRST", cache_dir, overwrite_cache)
     region_to_country = region_to_country_map(pro)
     demand_symbols = {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2}
+    ev_dumb_fraction = _load_ev_dumb_fraction()
 
     scenario_names = select_scenario_names(model.scenario_names)
     print(
@@ -640,10 +847,21 @@ def main(
         if year is None:
             continue
 
+        dumb_hourly, smart_hourly = _split_ev_dumb(el, ev_dumb_fraction, scenario_name, year)
+        dumb_country_hourly = (
+            dumb_hourly.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+        )
+
         for commodity in COMMODITIES:
             if commodity == "ELECTRICITY":
                 demand = country_hourly_demand(
-                    el, tuple(demand_categories), scenario_name, year
+                    el, ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES, scenario_name, year
+                )
+                demand = (
+                    pd.concat([demand, dumb_country_hourly])
+                    .groupby(["Country", "Season", "Time"])["Value"]
+                    .sum()
+                    .reset_index()
                 )
                 supply = country_hourly_supply(pro, scenario_name, year)
             else:
@@ -669,39 +887,92 @@ def main(
             )
             tables.append(build_country_table(rl, commodity, scenario_name, year))
 
-        for flex_option, commodity, spec in HOURLY_FLEX_OPTIONS:
-            hourly_net = flex_option_hourly_net(
-                spec,
-                commodity,
-                pro,
-                f_cons,
-                demand_symbols,
-                x_flow,
-                xh2_flow,
-                region_to_country,
-                scenario_name,
-                year,
-            )
-            if hourly_net.empty:
-                continue
-            sign = -1.0 if spec["kind"] in _DEMAND_SIDE_KINDS else 1.0
+            # Per-group FlexSign/need (system/category), each from that
+            # group's own residual load - not one system-wide value
+            # broadcast to every group - so every group's tracked flex
+            # options plus its "Other" bucket sum back to that group's own
+            # Total Flexibility Needs (see docs/adr/0017).
+            system_hourly_rl = rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
+            system_sign = flex_sign(system_hourly_rl)
+            system_need = flexibility_needs(system_hourly_rl)
 
-            system_table = build_flex_option_system_table(
-                hourly_net, flex_option, commodity, scenario_name, year
-            )
-            system_table["flex_need_twh"] *= sign
-            tables.append(system_table)
+            categorized_rl = rl.assign(
+                combined_category=rl["Country"].map(category_map)
+            ).dropna(subset=["combined_category"])
+            category_signs = {}
+            category_needs = {}
+            for group, group_rl in categorized_rl.groupby("combined_category"):
+                group_hourly_rl = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                category_signs[group] = flex_sign(group_hourly_rl)
+                category_needs[group] = flexibility_needs(group_hourly_rl)
 
-            category_table = build_flex_option_category_table(
-                hourly_net,
-                category_map,
-                flex_option,
-                commodity,
-                scenario_name,
-                year,
+            system_tracked = {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0}
+            category_tracked = {
+                group: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for group in category_needs
+            }
+
+            for flex_option, spec in (
+                (fo, s) for fo, com, s in HOURLY_FLEX_OPTIONS if com == commodity
+            ):
+                hourly_net = flex_option_hourly_net(
+                    spec,
+                    commodity,
+                    pro,
+                    f_cons,
+                    demand_symbols,
+                    x_flow,
+                    xh2_flow,
+                    region_to_country,
+                    scenario_name,
+                    year,
+                    ev_smart_hourly=smart_hourly if spec.get("category") == "ENDO_EV" else None,
+                )
+                if hourly_net.empty:
+                    continue
+
+                system_table = build_flex_option_system_table(
+                    hourly_net, system_sign, flex_option, commodity, scenario_name, year
+                )
+                tables.append(system_table)
+                for ts, value in zip(system_table["timescale"], system_table["flex_need_twh"]):
+                    system_tracked[ts] += value
+
+                category_table = build_flex_option_category_table(
+                    hourly_net,
+                    category_map,
+                    category_signs,
+                    flex_option,
+                    commodity,
+                    scenario_name,
+                    year,
+                )
+                tables.append(category_table)
+                for group, ts, value in zip(
+                    category_table["group"], category_table["timescale"], category_table["flex_need_twh"]
+                ):
+                    category_tracked[group][ts] += value
+
+            # "Other": whatever's left unattributed after every tracked flex
+            # option, computed the same way as any other technology (as a
+            # residual of the already-additive FlexNeed/FlexProv numbers,
+            # exploiting linearity) rather than silently omitted - a safety
+            # net for exact additivity regardless of whether FLEX_OPTIONS is
+            # a perfectly exhaustive partition (see docs/adr/0017).
+            other_system = {ts: system_need[ts] - system_tracked[ts] for ts in system_need}
+            tables.append(
+                _needs_rows_from_dict(
+                    other_system, scenario_name, year, "flex_option_system", "All", commodity, "Other"
+                )
             )
-            category_table["flex_need_twh"] *= sign
-            tables.append(category_table)
+            for group, needs in category_needs.items():
+                other_category = {
+                    ts: needs[ts] - category_tracked[group][ts] for ts in needs
+                }
+                tables.append(
+                    _needs_rows_from_dict(
+                        other_category, scenario_name, year, "flex_option_category", group, commodity, "Other"
+                    )
+                )
 
     tidy = (
         pd.concat(tables, ignore_index=True)

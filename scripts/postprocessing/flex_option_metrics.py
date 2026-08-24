@@ -52,14 +52,26 @@ from scripts.postprocessing.categorize_countries import (
 #          1. Functions           #
 # ------------------------------- #
 
-# Each commodity's own non-dispatchable-demand symbol (annual) - used both
-# to source storage's charging side and V2G's net G2V-minus-V2G side. See
-# CONTEXT.md's "Non-dispatchable demand"/"Non-dispatchable heat demand"/
-# "Non-dispatchable hydrogen demand" and docs/adr/0008.
+# Each commodity's own non-dispatchable-demand symbol (annual) - used to
+# source storage's charging side. See CONTEXT.md's "Non-dispatchable
+# demand"/"Non-dispatchable heat demand"/"Non-dispatchable hydrogen demand"
+# and docs/adr/0008.
 COMMODITY_DEMAND_SYMBOLS = {
     "ELECTRICITY": "EL_DEMAND_YCR",
     "HEAT": "H_DEMAND_YCRA",
     "HYDROGEN": "H2_DEMAND_YCR",
+}
+
+# Hourly counterparts of the above - needed only for "net_category_signed"
+# (EV charging/V2G, see docs/adr/0016), since splitting an already-net
+# series into its demand/supply parts requires per-Region-hour resolution;
+# the annual symbol above has already collapsed that sign information away
+# (a Region nets to one sign or the other over a full year almost always -
+# see docs/adr/0016's Context).
+HOURLY_DEMAND_SYMBOLS = {
+    "ELECTRICITY": "EL_DEMAND_YCRST",
+    "HEAT": "H_DEMAND_YCRAST",
+    "HYDROGEN": "H2_DEMAND_YCRST",
 }
 
 # Category values, within a commodity's own demand symbol, that represent
@@ -80,7 +92,7 @@ _METRIC_TYPES_BY_KIND = {
     "consumption": ("use",),
     "storage": ("capacity", "use"),
     "transmission": ("capacity", "use"),
-    "net_category": ("use",),
+    "net_category_signed": ("use",),
     "system_only": ("use",),
     "peaker": ("capacity", "use"),
 }
@@ -96,8 +108,15 @@ _METRIC_TYPES_BY_KIND = {
 #     (Fuel include/exclude list) and "exclude_backup" (drop rows whose
 #     Generation contains "BACKUP" - this dataset's peaker/backup
 #     convention, see docs/adr/0010).
-#   - "consumption": negative/demand-side electricity draw (F_CONS_YCRA,
-#     Fuel=ELECTRIC, Technology-filtered). No capacity.
+#   - "consumption": negative/demand-side draw (F_CONS_YCRA, Fuel=ELECTRIC
+#     by default - override via "fuel", e.g. Fuel cells' hydrogen draw uses
+#     "fuel": "HYDROGEN" - Technology-filtered). No capacity.
+#   - "area_contains"/"area_excludes" (optional, any kind reading F_CONS_YCRA/
+#     PRO_YCRAGF/G_CAP_YCRAF): restricts rows to Areas containing a given
+#     substring, or excludes rows matching any of a list of substrings -
+#     used to split PtH (power-to-heat) by deployment context (Industrial/
+#     Individual/District, see docs/adr/0017) since EL_DEMAND_YCRST itself
+#     has no Area column to split on.
 #   - "storage": both directions - positive "supply" (discharging, same as
 #     "production") and negative "demand" (charging, from that commodity's
 #     own COMMODITY_DEMAND_SYMBOLS entry, STORAGE_CHARGE_CATEGORIES).
@@ -106,24 +125,62 @@ _METRIC_TYPES_BY_KIND = {
 #     XH2_CAP_YCR/XH2_FLOW_YCR) - unchanged from before this redesign; a
 #     directional flow's sign is a From/To convention, not a supply/demand
 #     one, so it's deliberately left out of scope here.
-#   - "net_category": one already-net-signed series from that commodity's
-#     own demand symbol (V2G's ENDO_EV = net G2V-minus-V2G) - negated once
-#     to flip from "demand-table" convention (positive = more demand) to
-#     this script's "positive = injects" convention.
+#   - "net_category_signed": EV charging/V2G share one already-net GAMS
+#     variable (ENDO_EV = net G2V-minus-V2G, see docs/adr/0016) - there is
+#     no separate gross-charging or gross-discharge symbol to read (the
+#     V2G_FLEX_YCR symbol docs/adr/0008 moved away from was an "unconfirmed
+#     raw domain-fallback symbol"). So the net series is negated (flip
+#     "demand-table" convention, positive = more demand, to this script's
+#     "positive = injects" convention), then split by clipping to one sign
+#     at the raw Region-hour level (before any Country/Season/Time
+#     aggregation) - "direction": "demand" keeps only net-negative
+#     Region-hours (EV charging), "supply" keeps only net-positive ones
+#     (V2G). This approximates true gross charge/discharge - a Region-hour
+#     with simultaneous charging and discharging that nets to one sign
+#     understates the other side, since only the net is ever reported (see
+#     docs/adr/0016) - but it's the closest available approximation.
+#     Needs the hourly demand symbol (HOURLY_DEMAND_SYMBOLS), not the
+#     annual one used elsewhere in this dict, since the annual symbol has
+#     already collapsed all sign information a Region had within the year.
 #   - "system_only": unsigned magnitude, no Country dimension
 #     (DR_FLEX_Y) - unchanged; no equivalent net-signed source exists.
 #   - "peaker": unsigned/positive backup production, per commodity (see
 #     docs/adr/0010) - electricity and heat only, no hydrogen backup exists
 #     in this model.
 FLEX_OPTIONS = {
-    "Heat pumps": {
-        "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECT-TO-HEAT"]},
-        "HEAT": {"kind": "production", "technologies": ["ELECT-TO-HEAT"]},
+    # Renamed from "Heat pumps" and split by deployment context, not
+    # hardware type - GDTYPE=GETOH (Technology="ELECT-TO-HEAT") bundles
+    # real heat pumps, resistive/electric boilers, and industrial electric
+    # process heat under one technology string (confirmed via GDATA.inc
+    # generator-ID naming: HP_ELEC_*, BO_ELEC_*, GNR_IND-BO_*/GNR_IND-DF_*),
+    # so a hardware split isn't available - the Area column is, and matches
+    # how Balmorel itself distinguishes district/individual/industrial
+    # heating (see docs/adr/0017).
+    "Industrial PtH": {
+        "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECT-TO-HEAT"], "area_contains": "IND"},
+        "HEAT": {"kind": "production", "technologies": ["ELECT-TO-HEAT"], "area_contains": "IND"},
+    },
+    "Individual PtH": {
+        "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECT-TO-HEAT"], "area_contains": "IDVU"},
+        "HEAT": {"kind": "production", "technologies": ["ELECT-TO-HEAT"], "area_contains": "IDVU"},
+    },
+    "District PtH": {
+        "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECT-TO-HEAT"], "area_excludes": ["IND", "IDVU"]},
+        "HEAT": {"kind": "production", "technologies": ["ELECT-TO-HEAT"], "area_excludes": ["IND", "IDVU"]},
     },
     "Electrolysers": {
         "ELECTRICITY": {"kind": "consumption", "technologies": ["ELECTROLYZER"]},
         "HYDROGEN": {"kind": "production", "technologies": ["ELECTROLYZER"]},
         "HEAT": {"kind": "production", "technologies": ["ELECTROLYZER"]},
+    },
+    # Hydrogen-to-electricity - found uncovered by any other entry
+    # (GDTECHGROUP="FUELCELL", generators GNR_FC_H2_SOFCC* in
+    # HYDROGEN_GDATA.inc). No fixed 2025 capacity in this dataset
+    # (investment-only), so may be zero in practice - tracked explicitly
+    # rather than left to the "Other" catch-all (see docs/adr/0017).
+    "Fuel cells": {
+        "ELECTRICITY": {"kind": "production", "technologies": ["FUELCELL"]},
+        "HYDROGEN": {"kind": "consumption", "technologies": ["FUELCELL"], "fuel": "HYDROGEN"},
     },
     "Electricity storage": {
         "ELECTRICITY": {"kind": "storage", "technologies": ["INTRASEASONAL-ELECT-STORAGE"]},
@@ -140,8 +197,19 @@ FLEX_OPTIONS = {
     "Hydrogen transmission": {
         "HYDROGEN": {"kind": "transmission", "capacity_symbol": "XH2_CAP_YCR", "use_symbol": "XH2_FLOW_YCR"},
     },
+    "EV charging": {
+        "ELECTRICITY": {
+            "kind": "net_category_signed",
+            "category": "ENDO_EV",
+            "direction": "demand",
+        },
+    },
     "V2G": {
-        "ELECTRICITY": {"kind": "net_category", "category": "ENDO_EV"},
+        "ELECTRICITY": {
+            "kind": "net_category_signed",
+            "category": "ENDO_EV",
+            "direction": "supply",
+        },
     },
     "Demand response": {
         "ELECTRICITY": {"kind": "system_only", "symbol": "DR_FLEX_Y"},
@@ -179,6 +247,19 @@ _COLOURS = ["b", "r", "g", "c", "m", "y", "orange", "purple", "brown", "k"]
 _YEAR_MARKERS = {"2030": "o", "2040": "^", "2050": "s"}
 
 
+def _filter_area(df: pd.DataFrame, spec: dict) -> pd.DataFrame:
+    """Area-substring filter for options split by deployment context (e.g.
+    PtH's Industrial/Individual/District split, see
+    docs/adr/0017) - "area_contains" keeps only matching rows,
+    "area_excludes" drops rows matching any of a list of substrings. No-op
+    if spec has neither key."""
+    if "area_contains" in spec:
+        return df[df["Area"].str.contains(spec["area_contains"])]
+    if "area_excludes" in spec:
+        return df[~df["Area"].str.contains("|".join(spec["area_excludes"]))]
+    return df
+
+
 def _year_col(df: pd.DataFrame) -> str:
     return "Year" if "Year" in df.columns else "Y"
 
@@ -210,6 +291,7 @@ def extract_flex_option_values(
             df = df[~df["Fuel"].isin(spec["exclude_fuels"])]
         if spec.get("exclude_backup"):
             df = df[~df["Generation"].str.contains("BACKUP")]
+        df = _filter_area(df, spec)
         return df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
 
     if kind == "production":
@@ -218,7 +300,8 @@ def extract_flex_option_values(
 
     if kind == "consumption":
         df = get_symbol("F_CONS_YCRA")
-        df = df[(df["Technology"].isin(spec["technologies"])) & (df["Fuel"] == "ELECTRIC")]
+        df = df[(df["Technology"].isin(spec["technologies"])) & (df["Fuel"] == spec.get("fuel", "ELECTRIC"))]
+        df = _filter_area(df, spec)
         rows = df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
         rows["Value"] *= -1
         return [("demand", rows)]
@@ -239,12 +322,18 @@ def extract_flex_option_values(
         rows = df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
         return [("unsigned", rows)]
 
-    if kind == "net_category":
-        df = get_symbol(COMMODITY_DEMAND_SYMBOLS[commodity])
+    if kind == "net_category_signed":
+        df = get_symbol(HOURLY_DEMAND_SYMBOLS[commodity])
         df = df[df["Category"] == spec["category"]]
+        df = df.assign(Value=df["Value"] * -1)
+        df = df.assign(
+            Value=df["Value"].clip(lower=0)
+            if spec["direction"] == "supply"
+            else df["Value"].clip(upper=0)
+        )
+        direction = spec["direction"]
         rows = df.groupby(["Scenario", "Year", "Country"])["Value"].sum().reset_index()
-        rows["Value"] *= -1
-        return [("net", rows)]
+        return [(direction, rows)]
 
     if kind == "system_only":
         df = get_symbol(spec["symbol"])

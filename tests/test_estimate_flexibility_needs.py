@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.postprocessing.estimate_flexibility_needs import (  # noqa: E402
     HOURLY_FLEX_OPTIONS,
+    _split_ev_dumb,
     build_category_table,
     build_country_table,
     build_flex_option_category_table,
@@ -22,8 +23,10 @@ from scripts.postprocessing.estimate_flexibility_needs import (  # noqa: E402
     country_hourly_demand,
     country_hourly_supply,
     country_residual_load,
-    flex_option_hourly_use,
+    flex_option_hourly_net,
+    flex_sign,
     flexibility_needs,
+    flexibility_provision,
 )
 
 
@@ -54,6 +57,44 @@ def test_flexibility_needs_hierarchical_decomposition():
     assert result["Annual"] == pytest.approx(840 / 1e6)
 
 
+def test_flexibility_provision_matches_geis_et_al_worked_example():
+    # Geis et al. (2026) Appendix A.2's worked example: RL=[2,4],
+    # P1=[2,8], P2=[0,-4] -> FlexNeed=1, FlexProv1=3, FlexProv2=-2, and the
+    # two provisions sum exactly to the need (their proof of additivity,
+    # Appendix A.1 - see docs/adr/0017). Both time steps land in the same
+    # Day (T001/T002), so the daily mean equals the two-point average, the
+    # same "ℓ-mean" their toy example uses.
+    base = pd.DataFrame({"Season": ["S01", "S01"], "Time": ["T001", "T002"]})
+    rl = base.assign(Value=[2.0, 4.0])
+    p1 = base.assign(Value=[2.0, 8.0])
+    p2 = base.assign(Value=[0.0, -4.0])
+
+    need = flexibility_needs(rl)
+    sign = flex_sign(rl)
+    prov1 = flexibility_provision(p1, sign)
+    prov2 = flexibility_provision(p2, sign)
+
+    assert need["Daily"] == pytest.approx(1e-6)
+    assert prov1["Daily"] == pytest.approx(3e-6)
+    assert prov2["Daily"] == pytest.approx(-2e-6)
+    assert prov1["Daily"] + prov2["Daily"] == pytest.approx(need["Daily"])
+
+
+def test_flexibility_provision_sign_is_the_groups_own_not_the_options_own():
+    # A technology whose own deviation runs *opposite* the system's need
+    # gets a negative provision even though its own series alone is
+    # "positive-leaning" - the point of the correlation-based method over a
+    # fixed per-kind sign (see docs/adr/0011, superseded by 0017).
+    base = pd.DataFrame({"Season": ["S01", "S01"], "Time": ["T001", "T002"]})
+    rl = base.assign(Value=[10.0, 0.0])  # deviates high then low -> FlexSign [+1, -1]
+    opposing = base.assign(Value=[0.0, 10.0])  # deviates low then high -> opposite phase
+
+    sign = flex_sign(rl)
+    provision = flexibility_provision(opposing, sign)
+
+    assert provision["Daily"] < 0
+
+
 def test_country_hourly_demand_filters_scenario_year_and_category():
     el = pd.DataFrame(
         {
@@ -70,8 +111,55 @@ def test_country_hourly_demand_filters_scenario_year_and_category():
     exogenous_only = country_hourly_demand(el, ("EXOGENOUS",), "TST_R2050", "2050")
     assert exogenous_only["Value"].sum() == 10
 
-    exogenous_and_ev = country_hourly_demand(el, ("EXOGENOUS", "ENDO_EV"), "TST_R2050", "2050")
-    assert exogenous_and_ev["Value"].sum() == 15
+    exogenous_and_losses = country_hourly_demand(el, ("EXOGENOUS", "DIST_LOSSES"), "TST_R2050", "2050")
+    assert exogenous_and_losses["Value"].sum() == 11
+
+
+def test_split_ev_dumb_removes_only_the_dumb_share_from_net_charging_hours():
+    el = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 2,
+            "Year": ["2050"] * 2,
+            "Country": ["A", "A"],
+            "Region": ["R1", "R1"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T002"],
+            "Category": ["ENDO_EV", "ENDO_EV"],
+            # T001: net charging (positive, demand-table convention) ->
+            # dumb fraction applies. T002: net discharging (negative, V2G)
+            # -> no "dumb charging" to lock in, left untouched.
+            "Value": [100.0, -40.0],
+        }
+    )
+    dumb_fraction = pd.DataFrame({"Year": ["2050"], "Region": ["R1"], "dumb_fraction": [0.1]})
+
+    dumb, smart = _split_ev_dumb(el, dumb_fraction, "TST_R2050", "2050")
+
+    assert dumb["Value"].tolist() == pytest.approx([10.0, 0.0])
+    assert smart["Value"].tolist() == pytest.approx([90.0, -40.0])
+    # Conserved: dumb + smart always reconstructs the raw series exactly.
+    assert (dumb["Value"] + smart["Value"]).tolist() == pytest.approx([100.0, -40.0])
+
+
+def test_split_ev_dumb_defaults_missing_region_fraction_to_zero():
+    el = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"],
+            "Year": ["2050"],
+            "Country": ["A"],
+            "Region": ["UNKNOWN"],
+            "Season": ["S01"],
+            "Time": ["T001"],
+            "Category": ["ENDO_EV"],
+            "Value": [100.0],
+        }
+    )
+    dumb_fraction = pd.DataFrame({"Year": ["2050"], "Region": ["R1"], "dumb_fraction": [0.5]})
+
+    dumb, smart = _split_ev_dumb(el, dumb_fraction, "TST_R2050", "2050")
+
+    assert dumb["Value"].iloc[0] == 0.0
+    assert smart["Value"].iloc[0] == 100.0
 
 
 def test_country_hourly_supply_filters_non_dispatchable_technologies():
@@ -114,10 +202,11 @@ def test_build_system_table_sums_across_countries():
         }
     )
 
-    result = build_system_table(rl, "TST_R2050", "2050")
+    result = build_system_table(rl, "ELECTRICITY", "TST_R2050", "2050")
 
     assert set(result["group_type"]) == {"system"}
     assert set(result["group"]) == {"All"}
+    assert set(result["Commodity"]) == {"ELECTRICITY"}
     assert set(result["timescale"]) == {"Daily", "Weekly", "Annual"}
 
 
@@ -132,7 +221,7 @@ def test_build_category_table_drops_countries_missing_from_category_map():
     )
     category_map = {"A": "High Demand / High Wind"}
 
-    result = build_category_table(rl, category_map, "TST_R2050", "2050")
+    result = build_category_table(rl, category_map, "ELECTRICITY", "TST_R2050", "2050")
 
     assert set(result["group"]) == {"High Demand / High Wind"}
 
@@ -147,42 +236,153 @@ def test_build_country_table_keeps_countries_separate():
         }
     )
 
-    result = build_country_table(rl, "TST_R2050", "2050")
+    result = build_country_table(rl, "ELECTRICITY", "TST_R2050", "2050")
 
     assert set(result["group"]) == {"A", "B"}
     assert set(result["group_type"]) == {"country"}
 
 
-def test_hourly_flex_options_excludes_v2g_and_demand_response():
-    # Neither symbol carries Season/Time (see docs/adr/0007) - only
-    # technology/transmission/peaker kinds should survive the filter.
-    assert "V2G" not in HOURLY_FLEX_OPTIONS
-    assert "Demand response" not in HOURLY_FLEX_OPTIONS
-    assert "Heat pumps" in HOURLY_FLEX_OPTIONS
-    assert "Electricity transmission" in HOURLY_FLEX_OPTIONS
-    assert "Peaker" in HOURLY_FLEX_OPTIONS
+def test_hourly_flex_options_excludes_only_demand_response():
+    # DR_FLEX_Y has no "ST" (hourly) counterpart (see docs/adr/0007), so
+    # Demand response passively falls into the "Other" catch-all instead of
+    # ever appearing as a named row. V2G (unlike before docs/adr/0016) does
+    # have an hourly form - EL_DEMAND_YCRST's ENDO_EV category - so it's
+    # included here.
+    flex_option_names = {flex_option for flex_option, _, _ in HOURLY_FLEX_OPTIONS}
+    assert "Demand response" not in flex_option_names
+    assert "V2G" in flex_option_names
+    assert "District PtH" in flex_option_names
+    assert "Fuel cells" in flex_option_names
+    assert "Electricity transmission" in flex_option_names
+    assert "Peaker" in flex_option_names
 
 
-def test_flex_option_hourly_use_technology_filters_scenario_year_and_technology():
+def test_flex_option_hourly_net_production_filters_scenario_year_and_technology():
     pro = pd.DataFrame(
         {
             "Scenario": ["TST_R2050"] * 3 + ["OTHER_R2050"],
             "Year": ["2050"] * 3 + ["2050"],
             "Country": ["A", "A", "A", "A"],
+            "Area": ["A1", "A1", "A1", "A1"],
+            "Commodity": ["HEAT"] * 4,
             "Season": ["S01"] * 4,
             "Time": ["T001"] * 4,
             "Technology": ["ELECT-TO-HEAT", "ELECT-TO-HEAT", "CONDENSING", "ELECT-TO-HEAT"],
             "Value": [10, 5, 100, 99],
         }
     )
-    spec = {"kind": "technology", "technologies": ["ELECT-TO-HEAT"]}
+    spec = {"kind": "production", "technologies": ["ELECT-TO-HEAT"]}
+    empty = pd.DataFrame()
 
-    result = flex_option_hourly_use(spec, pro, pd.DataFrame(), pd.DataFrame(), {}, "TST_R2050", "2050")
+    result = flex_option_hourly_net(
+        spec, "HEAT", pro, empty, {}, empty, empty, {}, "TST_R2050", "2050"
+    )
 
     assert result["Value"].sum() == 15
 
 
-def test_flex_option_hourly_use_transmission_takes_absolute_flow_and_filters_symbol():
+def test_flex_option_hourly_net_production_applies_area_filter():
+    pro = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 2,
+            "Year": ["2050"] * 2,
+            "Country": ["A", "A"],
+            "Area": ["A1_IND", "A1_IDVU"],
+            "Commodity": ["HEAT", "HEAT"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T001"],
+            "Technology": ["ELECT-TO-HEAT", "ELECT-TO-HEAT"],
+            "Value": [10, 20],
+        }
+    )
+    spec = {"kind": "production", "technologies": ["ELECT-TO-HEAT"], "area_contains": "IND"}
+    empty = pd.DataFrame()
+
+    result = flex_option_hourly_net(
+        spec, "HEAT", pro, empty, {}, empty, empty, {}, "TST_R2050", "2050"
+    )
+
+    assert result["Value"].sum() == 10
+
+
+def test_flex_option_hourly_net_consumption_uses_configured_fuel():
+    f_cons = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 2,
+            "Year": ["2050"] * 2,
+            "Country": ["A", "A"],
+            "Area": ["A1", "A1"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T001"],
+            "Technology": ["FUELCELL", "FUELCELL"],
+            "Fuel": ["HYDROGEN", "ELECTRIC"],
+            "Value": [7.0, 100.0],
+        }
+    )
+    spec = {"kind": "consumption", "technologies": ["FUELCELL"], "fuel": "HYDROGEN"}
+    empty = pd.DataFrame()
+
+    result = flex_option_hourly_net(
+        spec, "HYDROGEN", empty, f_cons, {}, empty, empty, {}, "TST_R2050", "2050"
+    )
+
+    # Consumption is reported as negative net dispatch (withdraws from the
+    # commodity balance) - only the HYDROGEN=Fuel row should count.
+    assert result["Value"].sum() == -7.0
+
+
+def test_flex_option_hourly_net_consumption_hourly_category_reads_demand_symbol():
+    el = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 2,
+            "Year": ["2050"] * 2,
+            "Country": ["A", "A"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T001"],
+            "Category": ["ENDO_H2", "EXOGENOUS"],
+            "Value": [12.0, 999.0],
+        }
+    )
+    spec = {"kind": "consumption", "technologies": ["ELECTROLYZER"], "hourly_category": "ENDO_H2"}
+    empty = pd.DataFrame()
+
+    result = flex_option_hourly_net(
+        spec, "ELECTRICITY", empty, empty, {"ELECTRICITY": el}, empty, empty, {}, "TST_R2050", "2050"
+    )
+
+    assert result["Value"].sum() == -12.0
+
+
+def test_flex_option_hourly_net_net_category_signed_uses_ev_smart_hourly_override():
+    el = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"],
+            "Year": ["2050"],
+            "Country": ["A"],
+            "Season": ["S01"],
+            "Time": ["T001"],
+            "Category": ["ENDO_EV"],
+            "Value": [1000.0],  # would dominate the result if not overridden
+        }
+    )
+    ev_smart_hourly = pd.DataFrame(
+        {"Country": ["A"], "Season": ["S01"], "Time": ["T001"], "Value": [40.0]}
+    )
+    spec = {"kind": "net_category_signed", "category": "ENDO_EV", "direction": "demand"}
+    empty = pd.DataFrame()
+
+    result = flex_option_hourly_net(
+        spec, "ELECTRICITY", empty, empty, {"ELECTRICITY": el}, empty, empty, {}, "TST_R2050", "2050",
+        ev_smart_hourly=ev_smart_hourly,
+    )
+
+    # 40 (demand-table convention) -> -40 (positive=supply convention) ->
+    # clipped to <=0 for "demand" direction -> -40, not derived from the
+    # raw (overridden) 1000 value.
+    assert result["Value"].sum() == -40.0
+
+
+def test_flex_option_hourly_net_transmission_takes_absolute_flow_and_filters_symbol():
     x_flow = pd.DataFrame(
         {
             "Scenario": ["TST_R2050", "TST_R2050"],
@@ -195,13 +395,16 @@ def test_flex_option_hourly_use_transmission_takes_absolute_flow_and_filters_sym
     )
     xh2_flow = pd.DataFrame(columns=x_flow.columns)
     spec = {"kind": "transmission", "capacity_symbol": "X_CAP_YCR", "use_symbol": "X_FLOW_YCR"}
+    empty = pd.DataFrame()
 
-    result = flex_option_hourly_use(spec, pd.DataFrame(), x_flow, xh2_flow, {}, "TST_R2050", "2050")
+    result = flex_option_hourly_net(
+        spec, "ELECTRICITY", empty, empty, {}, x_flow, xh2_flow, {}, "TST_R2050", "2050"
+    )
 
     assert result["Value"].sum() == 14
 
 
-def test_flex_option_hourly_use_peaker_maps_region_to_country_and_filters_backup():
+def test_flex_option_hourly_net_peaker_maps_region_to_country_and_filters_backup():
     pro = pd.DataFrame(
         {
             "Scenario": ["TST_R2050"] * 2,
@@ -215,20 +418,26 @@ def test_flex_option_hourly_use_peaker_maps_region_to_country_and_filters_backup
         }
     )
     spec = {"kind": "peaker"}
+    empty = pd.DataFrame()
 
-    result = flex_option_hourly_use(spec, pro, pd.DataFrame(), pd.DataFrame(), {"R1": "A"}, "TST_R2050", "2050")
+    result = flex_option_hourly_net(
+        spec, "ELECTRICITY", pro, empty, {}, empty, empty, {"R1": "A"}, "TST_R2050", "2050"
+    )
 
     assert result["Value"].sum() == 7
     assert set(result["Country"]) == {"A"}
 
 
-def test_flex_option_hourly_use_rejects_non_hourly_kind():
+def test_flex_option_hourly_net_rejects_non_hourly_kind():
+    empty = pd.DataFrame()
     with pytest.raises(ValueError):
-        flex_option_hourly_use({"kind": "region_symbol"}, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}, "TST_R2050", "2050")
+        flex_option_hourly_net(
+            {"kind": "system_only"}, "ELECTRICITY", empty, empty, {}, empty, empty, {}, "TST_R2050", "2050"
+        )
 
 
-def test_build_flex_option_system_table_sums_across_countries():
-    hourly_use = pd.DataFrame(
+def test_build_flex_option_system_table_uses_the_groups_own_sign():
+    hourly_net = pd.DataFrame(
         {
             "Country": ["A", "B"],
             "Season": ["S01", "S01"],
@@ -236,16 +445,19 @@ def test_build_flex_option_system_table_sums_across_countries():
             "Value": [3.0, 4.0],
         }
     )
+    sign = pd.DataFrame({
+        "Season": ["S01"], "Time": ["T001"], "Daily": [1.0], "Weekly": [1.0], "Annual": [1.0],
+    })
 
-    result = build_flex_option_system_table(hourly_use, "Heat pumps", "TST_R2050", "2050")
+    result = build_flex_option_system_table(hourly_net, sign, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050")
 
     assert set(result["group_type"]) == {"flex_option_system"}
     assert set(result["group"]) == {"All"}
-    assert set(result["flex_option"]) == {"Heat pumps"}
+    assert set(result["flex_option"]) == {"Fuel cells"}
 
 
 def test_build_flex_option_category_table_drops_countries_missing_from_category_map():
-    hourly_use = pd.DataFrame(
+    hourly_net = pd.DataFrame(
         {
             "Country": ["A", "B"],
             "Season": ["S01", "S01"],
@@ -254,9 +466,34 @@ def test_build_flex_option_category_table_drops_countries_missing_from_category_
         }
     )
     category_map = {"A": "High Demand / High Wind"}
+    signs = {
+        "High Demand / High Wind": pd.DataFrame({
+            "Season": ["S01"], "Time": ["T001"], "Daily": [1.0], "Weekly": [1.0], "Annual": [1.0],
+        })
+    }
 
-    result = build_flex_option_category_table(hourly_use, category_map, "Heat pumps", "TST_R2050", "2050")
+    result = build_flex_option_category_table(
+        hourly_net, category_map, signs, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050"
+    )
 
     assert set(result["group"]) == {"High Demand / High Wind"}
     assert set(result["group_type"]) == {"flex_option_category"}
-    assert set(result["flex_option"]) == {"Heat pumps"}
+    assert set(result["flex_option"]) == {"Fuel cells"}
+
+
+def test_build_flex_option_category_table_skips_groups_with_no_sign():
+    hourly_net = pd.DataFrame(
+        {
+            "Country": ["A"],
+            "Season": ["S01"],
+            "Time": ["T001"],
+            "Value": [3.0],
+        }
+    )
+    category_map = {"A": "High Demand / High Wind"}
+
+    result = build_flex_option_category_table(
+        hourly_net, category_map, {}, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050"
+    )
+
+    assert result.empty

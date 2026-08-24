@@ -1,6 +1,6 @@
 # Sign flex_need_twh by demand/supply role for flex-option bar charts, and stack rather than group them
 
-**Status**: accepted
+**Status**: superseded by [0017](0017-correlation-based-flexibility-provision.md)
 
 ## Context
 
@@ -36,8 +36,11 @@ picture needs stacking.
   rows are untouched, always >=0) - `-1` for `"consumption"`-kind views
   (heat pump/electrolyser electricity draw), `+1` for everything else.
 - `"production"`/`"peaker"` are always supply-side, so `+1` is correct.
-  `"storage"`/`"transmission"`/`"net_category"` are genuinely bidirectional,
-  not a fixed demand- or supply-side role - signing them by their
+  `"storage"`/`"transmission"`/`"net_category"` (the last since split into
+  EV charging/V2G by [0016](0016-split-v2g-into-ev-charging-and-v2g.md),
+  whose net-period sum turned out not to be near-zero after all) are
+  genuinely bidirectional, not a fixed demand- or supply-side role - signing
+  them by their
   net-period sum was considered and rejected: storage in particular nets
   slightly *negative* over a full period from round-trip losses (charge >
   discharge), which would misleadingly stack it as "demand-side" despite
@@ -61,7 +64,10 @@ picture needs stacking.
   ELECTRICITY) are now negative. Residual load's own rows are unaffected.
   Any downstream consumer of this CSV that assumed all-positive values
   needs to take `.abs()` if it wants the pre-existing magnitude semantics.
-- Storage/transmission/V2G's bars still don't distinguish their charging
-  vs discharging (or import vs export) sub-components the way
+- Storage/transmission's bars still don't distinguish their charging vs
+  discharging (or import vs export) sub-components the way
   `flex_option_metrics.py`'s two-row storage view does - this ADR only
   fixes the demand-vs-supply-side cases that were unambiguous by "kind".
+  V2G was in this same bucket originally, but see
+  [0016](0016-split-v2g-into-ev-charging-and-v2g.md), which gives it its
+  own two-row split instead.
