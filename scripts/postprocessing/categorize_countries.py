@@ -89,7 +89,11 @@ def country_demand(el: pd.DataFrame, h: pd.DataFrame, h2: pd.DataFrame, scenario
     """Total demand (TWh) per country: electricity + heat + hydrogen summed
     directly, since all three are already in the same unit."""
     query = "Scenario == @scenario_name and Year == @year"
-    parts = [frame.query(query).groupby("Country")["Value"].sum() for frame in (el, h, h2)]
+    local_dict = {"scenario_name": scenario_name, "year": year}
+    parts = [
+        frame.query(query, local_dict=local_dict).groupby("Country")["Value"].sum()
+        for frame in (el, h, h2)
+    ]
     return pd.concat(parts, axis=1).sum(axis=1)
 
 

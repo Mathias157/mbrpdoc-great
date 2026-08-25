@@ -302,7 +302,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xlsxwriter-3.2.9-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/yamllint-1.38.0-pyhcf101f3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/yte-1.9.4-pyhd8ed1ab_0.conda
-      - pypi: https://files.pythonhosted.org/packages/23/63/4b68172e90855d76f078ebafb0dd3d3aae7ca0ca1a18722864fcfeae15e1/pybalmorel-1.2.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/36/f7/cf8bec9024625947e1a71441906f60a5fa6f9e4c441c4428037e73b1fcc8/pyogrio-0.12.1-cp312-cp312-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3c/78/6a04792ace63a93e162f1305392d500ae8ddcb620e7eb88a22fd622b35bb/geopandas-1.1.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/0e/fa3b193432cfc60c93b42f3be03365f5f909d2b3ea410295cf36df739e31/widgetsnbextension-4.0.15-py3-none-any.whl
@@ -314,6 +313,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/b8/be/212882c450bba74fc8d7d35cbd57e4af84792f0a56194819d98106b075af/pyproj-3.7.2-cp312-cp312-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/b9/30/7465b650110514fc5c9c3b59935264c35ab56f876322de34efa55367ee4e/cartopy-0.25.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/b9/37/e781683abac55dde9771e086b790e554811a71ed0b2b8a1e789b7430dd44/shapely-2.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/d3/98/f0ed5ccd79e1b7da4a17cdba360f1313e672c23bbf51cc83814c230d91d1/pybalmorel-1.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d7/60/8518ade380920044cbd16017f564df9dbe4b1cccc2009197c37fa7122f80/pyshp-3.1.0-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/bioconda/noarch/snakemake-9.23.1-hdfd78af_1.conda
@@ -4329,21 +4329,6 @@ packages:
   - pkg:pypi/yte?source=hash-mapping
   size: 16215
   timestamp: 1764250734338
-- pypi: https://files.pythonhosted.org/packages/23/63/4b68172e90855d76f078ebafb0dd3d3aae7ca0ca1a18722864fcfeae15e1/pybalmorel-1.2.1-py3-none-any.whl
-  name: pybalmorel
-  version: 1.2.1
-  sha256: 0ea3ede0591767611e656ac83dc363bd50415bef8fe877110b043ef432e1fa14
-  requires_dist:
-  - pandas>=2.1.4
-  - matplotlib>=3.9.0
-  - geopandas>=0.14.4
-  - gamsapi[transfer]>=45.7.0
-  - ipywidgets>=8.1.3
-  - cartopy
-  - requests
-  - xlsxwriter>=3.2.0 ; extra == 'weatheryear'
-  - pyyaml>=6.0 ; extra == 'weatheryear'
-  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/36/f7/cf8bec9024625947e1a71441906f60a5fa6f9e4c441c4428037e73b1fcc8/pyogrio-0.12.1-cp312-cp312-manylinux_2_28_x86_64.whl
   name: pyogrio
   version: 0.12.1
@@ -4516,6 +4501,21 @@ packages:
   - sphinx ; extra == 'docs'
   - sphinx-book-theme ; extra == 'docs'
   - sphinx-remove-toctrees ; extra == 'docs'
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/d3/98/f0ed5ccd79e1b7da4a17cdba360f1313e672c23bbf51cc83814c230d91d1/pybalmorel-1.2.2-py3-none-any.whl
+  name: pybalmorel
+  version: 1.2.2
+  sha256: 758c634ee79f18ae1326193f88276f8004ec87dd1049d835a6b4972a793fd20d
+  requires_dist:
+  - pandas>=2.1.4
+  - matplotlib>=3.9.0
+  - geopandas>=0.14.4
+  - gamsapi[transfer]>=45.7.0
+  - ipywidgets>=8.1.3
+  - cartopy
+  - requests
+  - xlsxwriter>=3.2.0 ; extra == 'weatheryear'
+  - pyyaml>=6.0 ; extra == 'weatheryear'
   requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/d7/60/8518ade380920044cbd16017f564df9dbe4b1cccc2009197c37fa7122f80/pyshp-3.1.0-py3-none-any.whl
   name: pyshp
