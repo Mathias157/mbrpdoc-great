@@ -18,6 +18,7 @@ from scripts.postprocessing.estimate_flexibility_needs import (  # noqa: E402
     build_category_table,
     build_country_table,
     build_flex_option_category_table,
+    build_flex_option_country_table,
     build_flex_option_system_table,
     build_system_table,
     country_hourly_demand,
@@ -204,7 +205,7 @@ def test_build_system_table_sums_across_countries():
 
     result = build_system_table(rl, "ELECTRICITY", "TST_R2050", "2050")
 
-    assert set(result["group_type"]) == {"system"}
+    assert set(result["group_type"]) == {"system_aggregate"}
     assert set(result["group"]) == {"All"}
     assert set(result["Commodity"]) == {"ELECTRICITY"}
     assert set(result["timescale"]) == {"Daily", "Weekly", "Annual"}
@@ -235,11 +236,29 @@ def test_build_country_table_keeps_countries_separate():
             "Value": [3.0, 4.0],
         }
     )
+    category_map = {"A": "High Demand / High Wind"}
 
-    result = build_country_table(rl, "ELECTRICITY", "TST_R2050", "2050")
+    result = build_country_table(rl, category_map, "ELECTRICITY", "TST_R2050", "2050")
 
     assert set(result["group"]) == {"A", "B"}
     assert set(result["group_type"]) == {"country"}
+
+
+def test_build_country_table_tags_category_and_defaults_missing_to_empty():
+    rl = pd.DataFrame(
+        {
+            "Country": ["A", "B"],
+            "Season": ["S01", "S01"],
+            "Time": ["T001", "T001"],
+            "Value": [3.0, 4.0],
+        }
+    )
+    category_map = {"A": "High Demand / High Wind"}
+
+    result = build_country_table(rl, category_map, "ELECTRICITY", "TST_R2050", "2050").set_index("group")
+
+    assert (result.loc["A", "category"] == "High Demand / High Wind").all()
+    assert (result.loc["B", "category"] == "").all()
 
 
 def test_hourly_flex_options_excludes_only_demand_response():
@@ -462,7 +481,7 @@ def test_build_flex_option_system_table_uses_the_groups_own_sign():
 
     result = build_flex_option_system_table(hourly_net, sign, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050")
 
-    assert set(result["group_type"]) == {"flex_option_system"}
+    assert set(result["group_type"]) == {"flex_option_system_aggregate"}
     assert set(result["group"]) == {"All"}
     assert set(result["flex_option"]) == {"Fuel cells"}
 
@@ -488,7 +507,7 @@ def test_build_flex_option_category_table_drops_countries_missing_from_category_
     )
 
     assert set(result["group"]) == {"High Demand / High Wind"}
-    assert set(result["group_type"]) == {"flex_option_category"}
+    assert set(result["group_type"]) == {"flex_option_category_aggregate"}
     assert set(result["flex_option"]) == {"Fuel cells"}
 
 
@@ -505,6 +524,50 @@ def test_build_flex_option_category_table_skips_groups_with_no_sign():
 
     result = build_flex_option_category_table(
         hourly_net, category_map, {}, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050"
+    )
+
+    assert result.empty
+
+
+def test_build_flex_option_country_table_uses_each_countrys_own_sign():
+    hourly_net = pd.DataFrame(
+        {
+            "Country": ["A", "A", "B", "B"],
+            "Season": ["S01", "S01", "S01", "S01"],
+            "Time": ["T001", "T002", "T001", "T002"],
+            "Value": [2.0, 8.0, 0.0, -4.0],
+        }
+    )
+    category_map = {"A": "High Demand / High Wind"}
+    # Geis et al.'s own worked example (see
+    # test_flexibility_provision_matches_geis_et_al_worked_example) reused
+    # per country - both hours land in the same Day, so FlexProv should
+    # again come out to 3e-6/-2e-6 for A/B respectively.
+    sign = pd.DataFrame({
+        "Season": ["S01", "S01"], "Time": ["T001", "T002"], "Daily": [-1.0, 1.0],
+        "Weekly": [0.0, 0.0], "Annual": [0.0, 0.0],
+    })
+    signs = {"A": sign, "B": sign}
+
+    result = build_flex_option_country_table(
+        hourly_net, category_map, signs, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050"
+    ).set_index("group")
+
+    assert set(result.index) == {"A", "B"}
+    assert set(result["group_type"]) == {"flex_option_country"}
+    assert result.loc["A"].set_index("timescale").loc["Daily", "flex_need_twh"] == pytest.approx(3e-6)
+    assert result.loc["B"].set_index("timescale").loc["Daily", "flex_need_twh"] == pytest.approx(-2e-6)
+    assert (result.loc["A", "category"] == "High Demand / High Wind").all()
+    assert (result.loc["B", "category"] == "").all()
+
+
+def test_build_flex_option_country_table_skips_countries_with_no_sign():
+    hourly_net = pd.DataFrame(
+        {"Country": ["A"], "Season": ["S01"], "Time": ["T001"], "Value": [3.0]}
+    )
+
+    result = build_flex_option_country_table(
+        hourly_net, {}, {}, "Fuel cells", "ELECTRICITY", "TST_R2050", "2050"
     )
 
     assert result.empty

@@ -5,22 +5,42 @@ For each fullyear/rolling scenario result and each commodity (electricity,
 heat, hydrogen - see docs/adr/0009), computes hourly residual load
 (non-dispatchable demand minus non-dispatchable supply, see CONTEXT.md and
 docs/adr/0006/0009) per country, then decomposes it hierarchically
-(hourly->daily->weekly->annual, following Geis et al. (2026)) into three
-flexibility-need numbers (TWh/a) - system-wide, per Demand/VRE Combined
-category (membership fixed from a reference scenario, see docs/adr/0004),
-and per country. Heat and hydrogen residual load is non-dispatchable demand
-only, never netted against a non-dispatchable supply (see docs/adr/0009).
+(hourly->daily->weekly->annual, following Geis et al. (2026)) into
+flexibility-need numbers (TWh/a) at three levels: system-wide and per
+Demand/VRE Combined category (membership fixed from a reference scenario,
+see docs/adr/0004) - each computed by *summing residual load across
+countries first, then decomposing* (group_type suffix `_aggregate`) - and
+per country (`group_type="country"`, decomposed first, never spatially
+summed). The two group levels are NOT interchangeable: since the need
+metric is built from absolute deviations, summing before decomposing always
+understates summing each country's own already-decomposed need (triangle
+inequality) - the aggregate figure implicitly assumes unconstrained
+("copper-plate") cross-border redistribution, crediting that smoothing to
+the aggregation step itself rather than to any tracked flex option (most
+consequentially transmission). Both are kept, deliberately, as two
+different modelling bounds rather than one replacing the other - see
+docs/adr/0020. Country rows carry a `category` column (Combined-category
+membership) so `plot_flexibility_needs.py` can roll them up into
+category-level "disaggregated" plots itself, without needing its own GDX
+dependency (see docs/adr/0012). Heat and hydrogen residual load is
+non-dispatchable demand only, never netted against a non-dispatchable
+supply (see docs/adr/0009).
 
 Each flexibility option's own commodity-signed net hourly dispatch (see
 flex_option_metrics.FLEX_OPTIONS, CONTEXT.md's "Commodity-signed flex
 value", and docs/adr/0008) is decomposed the same hierarchical way, but
 signed via Geis et al. (2026)'s correlation-based "flexibility provision"
 method (docs/adr/0017) rather than a fixed per-option sign: each option's
-own deviation curve is weighted by the *system's* own deviation sign (from
-residual load, not the option's own), making its contribution exactly
-additive with residual load's own Daily/Weekly/Annual need - including an
-explicit "Other" catch-all for whatever's left unattributed, per group and
-commodity.
+own deviation curve is weighted by the *group's own* deviation sign (from
+that group's own residual load, not the option's own), making its
+contribution exactly additive with that group's own Daily/Weekly/Annual
+need - including an explicit "Other" catch-all for whatever's left
+unattributed, per group and commodity. Computed at the same three levels as
+residual load: `flex_option_system_aggregate`, `flex_option_category_aggregate`,
+and `flex_option_country` (new, see docs/adr/0020) - the last one is what
+lets `plot_flexibility_needs.py` derive a disaggregated by-option view the
+same way it derives disaggregated residual load, instead of the aggregate
+tables' own spatial-summing-before-decomposition blind spot.
 
 Compute-only - writes flexibility_needs.csv and nothing else. Reading the
 GDX results this needs (particularly PRO_YCRAGFST) is the expensive part of
@@ -117,6 +137,7 @@ NEEDS_COLUMNS = [
     "Year",
     "group_type",
     "group",
+    "category",
     "flex_option",
     "Commodity",
     "timescale",
@@ -421,6 +442,7 @@ def _needs_rows_from_dict(
         "Year": year,
         "group_type": group_type,
         "group": group,
+        "category": "",
         "flex_option": flex_option,
         "Commodity": commodity,
         "timescale": list(needs.keys()),
@@ -431,14 +453,18 @@ def _needs_rows_from_dict(
 def build_system_table(
     rl: pd.DataFrame, commodity: str, scenario_name: str, year: str
 ) -> pd.DataFrame:
-    """Flexibility needs summed across every country in `rl` - one system-
-    wide hourly residual load series."""
+    """Aggregate flexibility need summed across every country in `rl` *before*
+    decomposition - one system-wide hourly residual load series. This is the
+    "copper-plate" bound, not a system-wide truth - see module docstring and
+    docs/adr/0020 for why `plot_flexibility_needs.py` also derives a
+    disaggregated system view by summing `build_country_table`'s own rows
+    instead."""
     hourly = rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
     return _needs_rows(
         hourly,
         scenario_name,
         year,
-        group_type="system",
+        group_type="system_aggregate",
         group="All",
         commodity=commodity,
     )
@@ -447,9 +473,11 @@ def build_system_table(
 def build_category_table(
     rl: pd.DataFrame, category_map: dict, commodity: str, scenario_name: str, year: str
 ) -> pd.DataFrame:
-    """Flexibility needs per Combined category - each category's hourly
-    residual load is its member countries' (fixed via `category_map`, see
-    docs/adr/0004) hourly residual load summed together."""
+    """Aggregate flexibility need per Combined category - each category's
+    hourly residual load is its member countries' (fixed via `category_map`,
+    see docs/adr/0004) hourly residual load summed together *before*
+    decomposition - the same copper-plate bound as `build_system_table`, one
+    level down. See docs/adr/0020."""
     categorized = rl.assign(combined_category=rl["Country"].map(category_map)).dropna(
         subset=["combined_category"]
     )
@@ -461,7 +489,7 @@ def build_category_table(
                 hourly,
                 scenario_name,
                 year,
-                group_type="category",
+                group_type="category_aggregate",
                 group=group,
                 commodity=commodity,
             )
@@ -474,10 +502,18 @@ def build_category_table(
 
 
 def build_country_table(
-    rl: pd.DataFrame, commodity: str, scenario_name: str, year: str
+    rl: pd.DataFrame, category_map: dict, commodity: str, scenario_name: str, year: str
 ) -> pd.DataFrame:
-    """Flexibility needs per individual country - table rows only (no plot,
-    see docs/adr/0006/CONTEXT.md), to avoid one PNG per country."""
+    """Flexibility need per individual country, decomposed before any
+    spatial summing - table rows only (no plot, see docs/adr/0006/
+    CONTEXT.md), to avoid one PNG per country. Carries a `category` column
+    (that country's Combined-category membership, from `category_map`) so
+    `plot_flexibility_needs.py` can roll these rows up into system-wide or
+    category-level "disaggregated" totals itself, without its own GDX
+    dependency - see docs/adr/0012, docs/adr/0020. A country absent from
+    `category_map` gets `category=""`, not dropped - unlike
+    `build_category_table`, system/country-level rows don't depend on
+    category membership to be meaningful."""
     tables = [
         _needs_rows(
             group_rl[["Season", "Time", "Value"]],
@@ -486,7 +522,7 @@ def build_country_table(
             group_type="country",
             group=country,
             commodity=commodity,
-        )
+        ).assign(category=category_map.get(country, ""))
         for country, group_rl in rl.groupby("Country")
     ]
     return (
@@ -654,19 +690,23 @@ def build_flex_option_system_table(
     scenario_name: str,
     year: str,
 ) -> pd.DataFrame:
-    """Daily/Weekly/Annual flexibility *provision* (see docs/adr/0017) of one
-    flex option's own commodity-signed net hourly dispatch, summed across
-    every country, weighted by the system's own FlexSign (`sign`, from
-    residual load - see `flex_sign`) rather than a fixed per-option sign -
-    system-wide equivalent of `build_system_table`, but the signal is the
-    option's own operation, not residual load."""
+    """Aggregate Daily/Weekly/Annual flexibility *provision* (see
+    docs/adr/0017) of one flex option's own commodity-signed net hourly
+    dispatch, summed across every country *before* decomposition, weighted
+    by the system's own FlexSign (`sign`, from residual load - see
+    `flex_sign`) rather than a fixed per-option sign - system-wide
+    equivalent of `build_system_table`, but the signal is the option's own
+    operation, not residual load. Shares `build_system_table`'s
+    copper-plate bound (see docs/adr/0020) - `build_flex_option_country_table`
+    is the per-country counterpart `plot_flexibility_needs.py` sums for a
+    disaggregated view instead."""
     hourly = hourly_net.groupby(["Season", "Time"])["Value"].sum().reset_index()
     provision = flexibility_provision(hourly, sign)
     return _needs_rows_from_dict(
         provision,
         scenario_name,
         year,
-        group_type="flex_option_system",
+        group_type="flex_option_system_aggregate",
         group="All",
         commodity=commodity,
         flex_option=flex_option,
@@ -688,7 +728,8 @@ def build_flex_option_category_table(
     Total Flexibility Needs line (see docs/adr/0017). Categories with no
     computed sign (i.e. absent from residual load's own categorization,
     should not normally happen since both are keyed off the same
-    `category_map`) are skipped rather than raising."""
+    `category_map`) are skipped rather than raising. Shares
+    `build_category_table`'s copper-plate bound (see docs/adr/0020)."""
     categorized = hourly_net.assign(
         combined_category=hourly_net["Country"].map(category_map)
     ).dropna(subset=["combined_category"])
@@ -703,11 +744,57 @@ def build_flex_option_category_table(
                 provision,
                 scenario_name,
                 year,
-                group_type="flex_option_category",
+                group_type="flex_option_category_aggregate",
                 group=group,
                 commodity=commodity,
                 flex_option=flex_option,
             )
+        )
+    return (
+        pd.concat(tables, ignore_index=True)
+        if tables
+        else pd.DataFrame(columns=NEEDS_COLUMNS)
+    )
+
+
+def build_flex_option_country_table(
+    hourly_net: pd.DataFrame,
+    category_map: dict,
+    signs: dict,
+    flex_option: str,
+    commodity: str,
+    scenario_name: str,
+    year: str,
+) -> pd.DataFrame:
+    """Country-level equivalent of `build_flex_option_category_table` - each
+    country weighted by that country's own FlexSign (`signs[country]`), so
+    country rows stay additive to that country's own Total Flexibility Needs
+    line (`build_country_table`'s own residual-load need) - the disaggregated
+    counterpart to `build_flex_option_system_table`/
+    `build_flex_option_category_table`'s copper-plate bound, see
+    docs/adr/0020. Countries with no computed sign are skipped rather than
+    raising, same as the category version. Table rows only, no dedicated
+    plot by default (mirrors `build_country_table`'s own "no PNG per
+    country" precedent) - `plot_flexibility_needs.py` derives its
+    disaggregated system/category-by-option plots by summing these rows,
+    using `category` for the category rollup, and can optionally plot a
+    single country's own rows on request."""
+    tables = []
+    for country, group_use in hourly_net.groupby("Country"):
+        if country not in signs:
+            continue
+        hourly = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
+        provision = flexibility_provision(hourly, signs[country])
+        tables.append(
+            _needs_rows_from_dict(
+                provision,
+                scenario_name,
+                year,
+                group_type="flex_option_country",
+                group=country,
+                commodity=commodity,
+                flex_option=flex_option,
+            ).assign(category=category_map.get(country, ""))
         )
     return (
         pd.concat(tables, ignore_index=True)
@@ -896,13 +983,17 @@ def main(
                     rl, category_map, commodity, scenario_name, year
                 )
             )
-            tables.append(build_country_table(rl, commodity, scenario_name, year))
+            tables.append(
+                build_country_table(rl, category_map, commodity, scenario_name, year)
+            )
 
-            # Per-group FlexSign/need (system/category), each from that
-            # group's own residual load - not one system-wide value
+            # Per-group FlexSign/need (system/category/country), each from
+            # that group's own residual load - not one system-wide value
             # broadcast to every group - so every group's tracked flex
             # options plus its "Other" bucket sum back to that group's own
-            # Total Flexibility Needs (see docs/adr/0017).
+            # Total Flexibility Needs (see docs/adr/0017). system/category
+            # are the aggregate (copper-plate) bound; country is the
+            # disaggregated one - see docs/adr/0020.
             system_hourly_rl = rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
             system_sign = flex_sign(system_hourly_rl)
             system_need = flexibility_needs(system_hourly_rl)
@@ -917,9 +1008,19 @@ def main(
                 category_signs[group] = flex_sign(group_hourly_rl)
                 category_needs[group] = flexibility_needs(group_hourly_rl)
 
+            country_signs = {}
+            country_needs = {}
+            for country, group_rl in rl.groupby("Country"):
+                group_hourly_rl = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                country_signs[country] = flex_sign(group_hourly_rl)
+                country_needs[country] = flexibility_needs(group_hourly_rl)
+
             system_tracked = {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0}
             category_tracked = {
                 group: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for group in category_needs
+            }
+            country_tracked = {
+                country: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for country in country_needs
             }
 
             for flex_option, spec in (
@@ -963,16 +1064,34 @@ def main(
                 ):
                     category_tracked[group][ts] += value
 
+                country_table = build_flex_option_country_table(
+                    hourly_net,
+                    category_map,
+                    country_signs,
+                    flex_option,
+                    commodity,
+                    scenario_name,
+                    year,
+                )
+                tables.append(country_table)
+                for country, ts, value in zip(
+                    country_table["group"], country_table["timescale"], country_table["flex_need_twh"]
+                ):
+                    country_tracked[country][ts] += value
+
             # "Other": whatever's left unattributed after every tracked flex
             # option, computed the same way as any other technology (as a
             # residual of the already-additive FlexNeed/FlexProv numbers,
             # exploiting linearity) rather than silently omitted - a safety
             # net for exact additivity regardless of whether FLEX_OPTIONS is
-            # a perfectly exhaustive partition (see docs/adr/0017).
+            # a perfectly exhaustive partition (see docs/adr/0017). Computed
+            # at all three levels - country-level "Other" is what a future
+            # investigation into its actual composition would start from
+            # (deferred, see docs/adr/0020's Consequences).
             other_system = {ts: system_need[ts] - system_tracked[ts] for ts in system_need}
             tables.append(
                 _needs_rows_from_dict(
-                    other_system, scenario_name, year, "flex_option_system", "All", commodity, "Other"
+                    other_system, scenario_name, year, "flex_option_system_aggregate", "All", commodity, "Other"
                 )
             )
             for group, needs in category_needs.items():
@@ -981,8 +1100,17 @@ def main(
                 }
                 tables.append(
                     _needs_rows_from_dict(
-                        other_category, scenario_name, year, "flex_option_category", group, commodity, "Other"
+                        other_category, scenario_name, year, "flex_option_category_aggregate", group, commodity, "Other"
                     )
+                )
+            for country, needs in country_needs.items():
+                other_country = {
+                    ts: needs[ts] - country_tracked[country][ts] for ts in needs
+                }
+                tables.append(
+                    _needs_rows_from_dict(
+                        other_country, scenario_name, year, "flex_option_country", country, commodity, "Other"
+                    ).assign(category=category_map.get(country, ""))
                 )
 
     tidy = (

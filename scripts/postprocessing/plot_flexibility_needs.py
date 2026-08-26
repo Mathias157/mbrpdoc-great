@@ -15,6 +15,23 @@ values in the CSV are expected, not a bug. This script itself has no
 opinion on *why* a value is signed one way or the other - it just stacks
 whatever's in `flex_need_twh`.
 
+Every system/category view now comes in two variants (see docs/adr/0020):
+"aggregate" (`_aggregate` PNG suffix, `group_type`s ending `_aggregate` in
+the CSV) sums residual load/flex-option dispatch across countries *before*
+decomposing - a copper-plate bound that implicitly assumes unconstrained
+cross-border redistribution. "Disaggregated" (`_disaggregated` suffix)
+decomposes each country first (the CSV's `country`/`flex_option_country`
+rows, written by estimate_flexibility_needs.py, never plotted directly
+there) and sums *after* - the opposite, fully-islanded bound. This script
+derives every disaggregated plot itself, by summing those country-level CSV
+rows (grouped by the CSV's own `category` column for the category-level
+roll-up) - no GDX/pybalmorel dependency is added by this (see
+docs/adr/0012). Neither variant is "the" true flexibility need; they
+bracket it. A single country's own flex-option breakdown can also be
+plotted on request via `--country` (table rows for every country are
+always in the CSV either way - see docs/adr/0020 for why there's no
+plotted grid of all of them by default).
+
 Split out from estimate_flexibility_needs.py (see its own docstring) so
 that iterating on a plot doesn't require re-running the expensive GDX read
 - this script has no GDX/GAMS/pybalmorel dependency at all, only reads a
@@ -397,7 +414,17 @@ def plot_flex_option_category_grid(
     default=None,
     help="Path to estimate_flexibility_needs.py's output. Defaults to <output-dir>/flexibility_needs.csv",
 )
-def main(output_dir: str, table_csv: str):
+@click.option(
+    "--country",
+    "countries",
+    multiple=True,
+    default=(),
+    help="Also plot one country's own flexibility-option breakdown (group_type=flex_option_country), "
+    "e.g. --country DENMARK, repeatable. Table rows for every country are always in the CSV either "
+    "way (see docs/adr/0020) - this only opts into a plot for the ones named here, not one PNG per "
+    "country by default.",
+)
+def main(output_dir: str, table_csv: str, countries: tuple):
     output_path = Path(output_dir)
     plots_dir = output_path / "flex_needs_plots"
 
@@ -408,7 +435,7 @@ def main(output_dir: str, table_csv: str):
         )
         return
 
-    tidy = pd.read_csv(table_path)
+    tidy = pd.read_csv(table_path, dtype={"category": str}).fillna({"category": ""})
     if tidy.empty:
         print(f"{table_path} is empty - nothing to plot.")
         return
@@ -420,36 +447,118 @@ def main(output_dir: str, table_csv: str):
         if by_commodity.empty:
             continue
 
-        for group_type in ("system", "category"):
+        # --- Aggregate residual-load views: system/category summed across
+        # countries *before* decomposition (the copper-plate bound written
+        # directly by estimate_flexibility_needs.py - see docs/adr/0020).
+        for group_type, label in (("system_aggregate", "system"), ("category_aggregate", "category")):
             subset = by_commodity[by_commodity["group_type"] == group_type]
             if subset.empty:
                 continue
             plot_flexibility_needs(
                 subset,
-                f"{group_type}, {commodity}",
-                plots_dir / f"{group_type}_{commodity}.png",
+                f"{label}, {commodity}, aggregate",
+                plots_dir / f"{label}_aggregate_{commodity}.png",
             )
 
+        # --- Disaggregated residual-load views: derived here by summing the
+        # CSV's own `country` rows (each already decomposed before any
+        # spatial summing) - the opposite, fully-islanded bound. Category
+        # roll-up uses the CSV's `category` column rather than recomputing
+        # Combined-category membership, so this script stays free of the
+        # GDX/pybalmorel dependency estimate_flexibility_needs.py needs (see
+        # docs/adr/0012, 0020).
+        country_rows = by_commodity[by_commodity["group_type"] == "country"]
+        if not country_rows.empty:
+            system_disaggregated = (
+                country_rows.groupby(["Scenario", "timescale"], as_index=False)["flex_need_twh"]
+                .sum()
+                .assign(group="All")
+            )
+            plot_flexibility_needs(
+                system_disaggregated,
+                f"system, {commodity}, disaggregated",
+                plots_dir / f"system_disaggregated_{commodity}.png",
+            )
+
+            category_disaggregated = (
+                country_rows[country_rows["category"] != ""]
+                .groupby(["Scenario", "category", "timescale"], as_index=False)["flex_need_twh"]
+                .sum()
+                .rename(columns={"category": "group"})
+            )
+            if not category_disaggregated.empty:
+                plot_flexibility_needs(
+                    category_disaggregated,
+                    f"category, {commodity}, disaggregated",
+                    plots_dir / f"category_disaggregated_{commodity}.png",
+                )
+
+        # --- Aggregate flex-option views (same copper-plate bound, applied
+        # to each option's own dispatch instead of residual load). ---
         option_system_rows = by_commodity[
-            by_commodity["group_type"] == "flex_option_system"
+            by_commodity["group_type"] == "flex_option_system_aggregate"
         ]
         if not option_system_rows.empty:
             plot_flexibility_needs(
                 option_system_rows,
-                f"flexibility options, system-wide ({commodity})",
-                plots_dir / f"system_by_option_{commodity}.png",
+                f"flexibility options, system-wide, aggregate ({commodity})",
+                plots_dir / f"system_by_option_aggregate_{commodity}.png",
                 hue_col="flex_option",
             )
 
         option_category_rows = by_commodity[
-            by_commodity["group_type"] == "flex_option_category"
+            by_commodity["group_type"] == "flex_option_category_aggregate"
         ]
         if not option_category_rows.empty:
             plot_flex_option_category_grid(
                 option_category_rows,
-                commodity,
-                plots_dir / f"category_by_option_{commodity}.png",
+                f"{commodity}, aggregate",
+                plots_dir / f"category_by_option_aggregate_{commodity}.png",
             )
+
+        # --- Disaggregated flex-option views: summed from the CSV's
+        # `flex_option_country` rows (see docs/adr/0020) - additive with the
+        # disaggregated residual-load totals above by construction, since
+        # each country's own tracked options + its own "Other" already sum
+        # to that country's own need (docs/adr/0017's additivity, applied
+        # per country) and summation is linear.
+        option_country_rows = by_commodity[by_commodity["group_type"] == "flex_option_country"]
+        if not option_country_rows.empty:
+            system_by_option_disaggregated = option_country_rows.groupby(
+                ["Scenario", "flex_option", "timescale"], as_index=False
+            )["flex_need_twh"].sum()
+            plot_flexibility_needs(
+                system_by_option_disaggregated,
+                f"flexibility options, system-wide, disaggregated ({commodity})",
+                plots_dir / f"system_by_option_disaggregated_{commodity}.png",
+                hue_col="flex_option",
+            )
+
+            category_by_option_disaggregated = (
+                option_country_rows[option_country_rows["category"] != ""]
+                .groupby(["Scenario", "category", "flex_option", "timescale"], as_index=False)["flex_need_twh"]
+                .sum()
+                .rename(columns={"category": "group"})
+            )
+            if not category_by_option_disaggregated.empty:
+                plot_flex_option_category_grid(
+                    category_by_option_disaggregated,
+                    f"{commodity}, disaggregated",
+                    plots_dir / f"category_by_option_disaggregated_{commodity}.png",
+                )
+
+            # --- Optional: one named country's own flex-option breakdown. ---
+            for country in countries:
+                country_subset = option_country_rows[option_country_rows["group"] == country]
+                if country_subset.empty:
+                    print(f"No flex_option_country rows for {country!r} ({commodity}) - skipping.")
+                    continue
+                plot_flexibility_needs(
+                    country_subset,
+                    f"flexibility options, {country} ({commodity})",
+                    plots_dir / f"country_by_option_{country}_{commodity}.png",
+                    hue_col="flex_option",
+                )
 
     print(f"Wrote plots to {plots_dir}.")
 
