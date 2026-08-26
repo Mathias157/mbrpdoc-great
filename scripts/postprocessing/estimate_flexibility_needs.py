@@ -515,7 +515,10 @@ def flex_option_hourly_net(
     "Commodity-signed flex value" and docs/adr/0008) - the same shape as
     `country_hourly_supply`'s output, so `flexibility_needs()`/
     `flexibility_provision()` decompose it the same hierarchical way as
-    residual load. Only called for `HOURLY_FLEX_OPTIONS`. `demand_symbols`
+    residual load. Transmission is the one exception to the "Commodity-signed
+    flex value" convention's own sourcing: it's signed by net import minus
+    export here, not unsigned utilisation as in flex_option_metrics.py (see
+    docs/adr/0019). Only called for `HOURLY_FLEX_OPTIONS`. `demand_symbols`
     is {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2} - each commodity's own
     hourly non-dispatchable-demand symbol, reused here to source storage's
     charging side, electrolysers' consumption (via "hourly_category"), and
@@ -584,18 +587,26 @@ def flex_option_hourly_net(
     if kind == "transmission":
         flow = x_flow if spec["use_symbol"] == "X_FLOW_YCR" else xh2_flow
         df = _scenario_year(flow)
-        # abs(): a directional flow can be negative depending on this
-        # symbol's From/To sign convention - "use" here means how much the
-        # interconnector is utilised, not net export/import direction
-        # (deliberately kept unsigned/out of scope, see docs/adr/0008).
-        supply = (
+        # Net cross-border position per country-hour: import (flow arriving
+        # into one of this country's regions, via `To`) minus export (flow
+        # leaving from one of this country's own regions - `Country` is
+        # always the *exporting* region's country on this symbol, confirmed
+        # against real GDX output, see docs/adr/0019 - unlike
+        # flex_option_metrics.py's own unsigned utilisation view of the same
+        # symbol, see docs/adr/0008). Intra-country flow (e.g. NO1->NO2)
+        # cancels to zero at the country level automatically, which is
+        # correct - only cross-border flow should move a country's own
+        # residual-load balance.
+        export = df.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
+        import_ = (
             df
-            .assign(Value=df["Value"].abs())
+            .assign(Country=df["To"].map(region_to_country))
+            .dropna(subset=["Country"])
             .groupby(["Country", "Season", "Time"])["Value"]
             .sum()
             .reset_index()
         )
-        return _net_hourly(supply, _EMPTY_HOURLY)
+        return _net_hourly(import_, export)
 
     if kind == "net_category_signed":
         # Split at raw Region-hour resolution, before any Country/Season/

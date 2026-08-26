@@ -382,26 +382,37 @@ def test_flex_option_hourly_net_net_category_signed_uses_ev_smart_hourly_overrid
     assert result["Value"].sum() == -40.0
 
 
-def test_flex_option_hourly_net_transmission_takes_absolute_flow_and_filters_symbol():
+def test_flex_option_hourly_net_transmission_nets_import_minus_export_and_filters_symbol():
+    # A exports 10 to B, and separately imports 4 from B, both at T001 -
+    # X_FLOW_YCR's "Country" column is always the *exporting* region's
+    # country (see docs/adr/0019), so A's own net position is import(4) -
+    # export(10) = -6, and B's is import(10) - export(4) = 6. Intra-country
+    # flow (C1 -> C2, both mapped to "C") at T002 must cancel to 0.
     x_flow = pd.DataFrame(
         {
-            "Scenario": ["TST_R2050", "TST_R2050"],
-            "Year": ["2050", "2050"],
-            "Country": ["A", "A"],
-            "Season": ["S01", "S01"],
-            "Time": ["T001", "T002"],
-            "Value": [10, -4],
+            "Scenario": ["TST_R2050", "TST_R2050", "TST_R2050"],
+            "Year": ["2050", "2050", "2050"],
+            "Country": ["A", "B", "C"],
+            "From": ["A1", "B1", "C1"],
+            "To": ["B1", "A1", "C2"],
+            "Season": ["S01", "S01", "S01"],
+            "Time": ["T001", "T001", "T002"],
+            "Value": [10, 4, 7],
         }
     )
     xh2_flow = pd.DataFrame(columns=x_flow.columns)
     spec = {"kind": "transmission", "capacity_symbol": "X_CAP_YCR", "use_symbol": "X_FLOW_YCR"}
+    region_to_country = {"A1": "A", "B1": "B", "C1": "C", "C2": "C"}
     empty = pd.DataFrame()
 
     result = flex_option_hourly_net(
-        spec, "ELECTRICITY", empty, empty, {}, x_flow, xh2_flow, {}, "TST_R2050", "2050"
+        spec, "ELECTRICITY", empty, empty, {}, x_flow, xh2_flow, region_to_country, "TST_R2050", "2050"
     )
 
-    assert result["Value"].sum() == 14
+    by_country = result.set_index("Country")["Value"]
+    assert by_country["A"] == -6
+    assert by_country["B"] == 6
+    assert by_country["C"] == 0
 
 
 def test_flex_option_hourly_net_peaker_maps_region_to_country_and_filters_backup():

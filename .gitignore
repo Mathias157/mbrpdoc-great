@@ -67,3 +67,5 @@ data/
 scripts/plots/
 report/figures
 build_postprocess/
+build_postprocess_WY/
+logs/
