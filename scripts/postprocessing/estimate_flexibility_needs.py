@@ -61,6 +61,7 @@ Created on 14.08.2026
 # ------------------------------- #
 
 import sys
+import time
 from pathlib import Path
 
 # Add repo root (for scripts.postprocessing.*) and the Balmorel submodule's
@@ -76,6 +77,17 @@ from decouple import config
 from pybalmorel import Balmorel
 
 from functions import backup_production
+
+# Wall-clock timing markers (HPC runs of this script take a long time - see
+# module docstring - and it's not obvious up front whether that's GDX
+# reading, GAMS database collection, or the per-scenario/option Python loops
+# below; these markers let a slow run be diagnosed after the fact from its
+# stdout log alone, without re-running under a profiler).
+_T0 = time.perf_counter()
+
+
+def _log(msg: str) -> None:
+    print(f"[t={time.perf_counter() - _T0:8.1f}s] {msg}", flush=True)
 
 from scripts.postprocessing.aggregate_category_costs import build_reference_category_map
 from scripts.postprocessing.categorize_countries import (
@@ -246,13 +258,19 @@ def _get_result_cached(
     pickle cache, but self-contained (no click context) and living under
     the (already gitignored) --output-dir."""
     cache_path = cache_dir / f"{symbol}.pkl"
+    t_start = time.perf_counter()
     if cache_path.exists() and not overwrite:
-        print(f"Loading {symbol} from cached .pkl file")
-        return pd.read_pickle(cache_path)
-    print(f"Loading {symbol} from Balmorel results")
+        _log(f"Loading {symbol} from cached .pkl file")
+        df = pd.read_pickle(cache_path)
+        _log(f"  {symbol}: {len(df):,} rows loaded from cache in {time.perf_counter() - t_start:.1f}s")
+        return df
+    _log(f"Loading {symbol} from Balmorel results (GDX read - not cached yet)")
     df = res.get_result(symbol)
+    _log(f"  {symbol}: {len(df):,} rows read from GDX in {time.perf_counter() - t_start:.1f}s")
+    t_pickle = time.perf_counter()
     cache_dir.mkdir(parents=True, exist_ok=True)
     df.to_pickle(cache_path)
+    _log(f"  {symbol}: cached to {cache_path.name} in {time.perf_counter() - t_pickle:.1f}s")
     return df
 
 
@@ -392,7 +410,31 @@ def flexibility_provision(hourly: pd.DataFrame, sign: pd.DataFrame) -> dict:
     negative when it opposes, regardless of the option's nominal
     supply/demand role. Exactly additive with `flexibility_needs()` across
     every tracked option plus an explicit "Other" residual, by construction
-    (Geis's Appendix A.1) - see docs/adr/0017."""
+    (Geis's Appendix A.1) - see docs/adr/0017.
+
+    `hourly` is reindexed onto `sign`'s own (Season, Time) domain - always
+    the complete 8736-hour grid, since `sign` comes from residual load,
+    which never has an all-countries-zero hour - and zero-filled before
+    `_period_means` runs. GDX never stores true zeros, so an option that's
+    genuinely zero everywhere at some hour (e.g. Peaker/backup only firing
+    304 of 8736 hours, or Nuclear off for maintenance) has that hour
+    *missing* from its own table rather than present as 0; averaging over
+    only the hours where a sparse option happens to have a row - instead of
+    over the full year, with the silent hours correctly counted as
+    contributing 0 - inflates its daily/weekly/annual means (dividing by
+    however many hours happen to be present instead of by 24/168/8736),
+    which biases its deviations, sign-alignment, and hence its provision at
+    every timescale. Confirmed empirically: for base_R2050/ELECTRICITY this
+    was the entire "Other" catch-all - zero-filling before decomposing
+    reduces Other to exact-zero (to float precision) at all three
+    timescales, with no missing flex option or sign-correlation effect
+    involved."""
+    hourly = (
+        sign[["Season", "Time"]]
+        .merge(hourly, on=["Season", "Time"], how="left")
+        .fillna(0)
+        .infer_objects(copy=False)
+    )
     working = (
         _period_means(hourly)
         .merge(sign, on=["Season", "Time"], how="left")
@@ -874,6 +916,7 @@ def main(
     scenarios: tuple,
     overwrite_cache: bool,
 ):
+    _log("estimate_flexibility_needs.py starting")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     table_path = output_path / "flexibility_needs.csv"
@@ -905,14 +948,19 @@ def main(
         pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
         return
 
+    _log(f"Scanning {balmorel_path!r} for scenario folders")
+    t_scan = time.perf_counter()
     model = Balmorel(balmorel_path, gams_system_directory=gams_sysdir)
+    _log(f"Found {len(model.scenarios)} scenario folder(s) in {time.perf_counter() - t_scan:.1f}s")
     if scenarios:
         # locate_results() alone is cheap (filenames only, no GDX read -
         # see AGENTS.md's pybalmorel note) - used here only to resolve
         # which scenario *folder* each requested scenario name lives in,
         # so `model.scenarios` can be pruned before collect_results()
         # re-locates and opens a GAMS database per remaining folder.
+        t_locate = time.perf_counter()
         model.locate_results(suffix_naming_only=True)
+        _log(f"locate_results() (filenames only) done in {time.perf_counter() - t_locate:.1f}s")
         missing = set(scenarios) - set(model.scname_to_scfolder)
         if missing:
             print(f"Requested --scenarios not found, ignoring: {sorted(missing)}")
@@ -920,7 +968,12 @@ def main(
             model.scname_to_scfolder[s] for s in scenarios if s in model.scname_to_scfolder
         }
         model.scenarios = [SC for SC in model.scenarios if SC in wanted_folders]
+        _log(f"Pruned to {len(model.scenarios)} scenario folder(s) matching --scenarios")
+
+    _log("collect_results() starting - opens a GAMS database per remaining scenario folder")
+    t_collect = time.perf_counter()
     model.collect_results(suffix_naming_only=True)
+    _log(f"collect_results() done in {time.perf_counter() - t_collect:.1f}s")
     res = model.results
 
     el = _get_result_cached(res, "EL_DEMAND_YCRST", cache_dir, overwrite_cache)
@@ -935,14 +988,17 @@ def main(
     ev_dumb_fraction = _load_ev_dumb_fraction()
 
     scenario_names = select_scenario_names(model.scenario_names)
-    print(
+    _log(
         f"Estimating flexibility needs for {len(scenario_names)} fullyear/rolling scenario result(s): {scenario_names}"
     )
 
     tables = []
-    for scenario_name in scenario_names:
+    for scenario_i, scenario_name in enumerate(scenario_names, start=1):
+        t_scenario = time.perf_counter()
+        _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: starting")
         year = scenario_target_year(el, scenario_name=scenario_name)
         if year is None:
+            _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: no target year found, skipping")
             continue
 
         dumb_hourly, smart_hourly = _split_ev_dumb(el, ev_dumb_fraction, scenario_name, year)
@@ -951,6 +1007,7 @@ def main(
         )
 
         for commodity in COMMODITIES:
+            t_commodity = time.perf_counter()
             if commodity == "ELECTRICITY":
                 demand = country_hourly_demand(
                     el, ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES, scenario_name, year
@@ -1026,6 +1083,7 @@ def main(
             for flex_option, spec in (
                 (fo, s) for fo, com, s in HOURLY_FLEX_OPTIONS if com == commodity
             ):
+                t_option = time.perf_counter()
                 hourly_net = flex_option_hourly_net(
                     spec,
                     commodity,
@@ -1079,6 +1137,12 @@ def main(
                 ):
                     country_tracked[country][ts] += value
 
+                _log(
+                    f"    [{scenario_name}/{commodity}] flex_option={flex_option!r}: "
+                    f"done in {time.perf_counter() - t_option:.2f}s "
+                    f"({hourly_net['Country'].nunique()} country-hour row(s): {len(hourly_net):,})"
+                )
+
             # "Other": whatever's left unattributed after every tracked flex
             # option, computed the same way as any other technology (as a
             # residual of the already-additive FlexNeed/FlexProv numbers,
@@ -1113,6 +1177,14 @@ def main(
                     ).assign(category=category_map.get(country, ""))
                 )
 
+            _log(
+                f"  [{scenario_name}] commodity={commodity}: "
+                f"done in {time.perf_counter() - t_commodity:.1f}s"
+            )
+
+        _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: done in {time.perf_counter() - t_scenario:.1f}s")
+
+    _log(f"All scenarios processed - writing {table_path}")
     tidy = (
         pd.concat(tables, ignore_index=True)
         if tables
@@ -1121,7 +1193,7 @@ def main(
     if years:
         tidy = tidy[tidy["Year"].astype(str).isin([str(y) for y in years])]
     tidy.to_csv(table_path, index=False)
-    print(f"Wrote {len(tidy)} row(s) to {table_path}. Plot with plot_flexibility_needs.py.")
+    _log(f"Wrote {len(tidy)} row(s) to {table_path}. Plot with plot_flexibility_needs.py.")
 
 
 if __name__ == "__main__":
