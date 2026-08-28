@@ -55,10 +55,8 @@ clean = "snakemake clean"
 analyse = "cd scripts/Balmorel && python analysis/analyse.py "
 verify =  "cd scripts/Balmorel && python analysis/verify.py "
 illustrate-flex = "python scripts/postprocessing/illustrate_flexibility_needs.py "
-sync-down = { cmd = "rsync -avzu --filter=':- .gitignore' mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/ . && rsync -avzu --filter=':- .gitignore'  mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel/base/data/ ./scripts/Balmorel/base/data", description = "Syncs repository to local, including .git folder, but without gitignored files" }
-sync-up = { cmd = "rsync -avzu --filter=':- .gitignore'  ./ mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great && rsync -avzu --filter=':- .gitignore'  ./scripts/Balmorel/base/data/ mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel/base/data", description = "Syncs repository to remote, including .git folder, but without gitignored files" }
-sophia-sync-down = { cmd = "rsync -avzu --filter=':- .gitignore' mberos@sophia.dtu.dk:~/Repos/GREAT/ scripts/Balmorel && rsync -avzu --filter=':- .gitignore' mberos@sophia.dtu.dk:~/Repos/GREAT/base/data/ ./scripts/Balmorel/base/data", description = "Syncs repository to local, including .git folder, but without gitignored files" }
-sophia-sync-up = { cmd = "rsync -avzu --filter=':- .gitignore'  scripts/Balmorel/ mberos@sophia.dtu.dk:~/Repos/GREAT && rsync -avzu --filter=':- .gitignore'  ./scripts/Balmorel/base/data/ mberos@sophia.dtu.dk:~/Repos/GREAT/base/data", description = "Syncs repository to remote, including .git folder, but without gitignored files" }
+sync-down = { cmd = "rsync -avzu --delete --filter=':- .gitignore' mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/ . && rsync -avzu --delete --filter=':- .gitignore' mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel/ ./scripts/Balmorel && rsync -avzu --delete --filter=':- .gitignore'  mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel/base/data/ ./scripts/Balmorel/base/data", description = "Syncs repository to local, including .git folder, but without gitignored files" }
+sync-up = { cmd = "rsync -avzu --delete --filter=':- .gitignore'  ./ mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great && rsync -avzu --delete --filter=':- .gitignore'  ./scripts/Balmorel/ mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel && rsync -avzu --delete --filter=':- .gitignore'  ./scripts/Balmorel/base/data/ mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel/base/data", description = "Syncs repository to remote, including .git folder, but without gitignored files" }
 sync-plots = { cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/analysis/plots/*' scripts/Balmorel/analysis/plots/", description = "Download everything from analysis/plots"}
 sync-output = { cmd = "rsync -avzu mberos@login2.hpc.dtu.dk:'/work3/mberos/Balmorel/analysis/output/*' scripts/Balmorel/analysis/output/", description = "Download everything from analysis/output"}
 
@@ -74,12 +72,12 @@ description = "Get MainResults from a scenario folder (first arg) with a certain
 
 [tasks.sophia-sync-mainresults-up]
 args = ["scenario", {arg="suffix", default="*"}]
-cmd = "rsync -avzu scripts/Balmorel/{{ scenario }}/model/MainResults{{ suffix }}.gdx mberos@sophia.dtu.dk:'~/Repos/GREAT/{{ scenario }}/model/' "
+cmd = "rsync -avzu scripts/Balmorel/{{ scenario }}/model/MainResults{{ suffix }}.gdx mberos@sophia.dtu.dk:'~/Repos/mbrpdoc-great/scripts/Balmorel/{{ scenario }}/model/' "
 description = "Get MainResults from a scenario folder (first arg) with a certain suffix (second arg, defaults to *)"
 
 [tasks.sophia-sync-mainresults]
 args = ["scenario", {arg="suffix", default="*"}]
-cmd = "rsync -avzu 'mberos@sophia.dtu.dk:/home/mberos/Repos/GREAT/{{ scenario }}/model/MainResults{{ suffix }}.gdx' scripts/Balmorel/{{ scenario }}/model/"
+cmd = "rsync -avzu 'mberos@sophia.dtu.dk:/home/mberos/Repos/mbrpdoc-great/scripts/Balmorel/{{ scenario }}/model/MainResults{{ suffix }}.gdx' scripts/Balmorel/{{ scenario }}/model/"
 description = "Get MainResults from a scenario folder (first arg) with a certain suffix (second arg, defaults to *)"
 
 [tasks.create-weather-year-scenarios]

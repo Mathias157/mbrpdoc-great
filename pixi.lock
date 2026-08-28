@@ -313,8 +313,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/b8/be/212882c450bba74fc8d7d35cbd57e4af84792f0a56194819d98106b075af/pyproj-3.7.2-cp312-cp312-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/b9/30/7465b650110514fc5c9c3b59935264c35ab56f876322de34efa55367ee4e/cartopy-0.25.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/b9/37/e781683abac55dde9771e086b790e554811a71ed0b2b8a1e789b7430dd44/shapely-2.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/d3/98/f0ed5ccd79e1b7da4a17cdba360f1313e672c23bbf51cc83814c230d91d1/pybalmorel-1.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d7/60/8518ade380920044cbd16017f564df9dbe4b1cccc2009197c37fa7122f80/pyshp-3.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d9/23/8ac6130a4b402b218c056d5855d0d32842665f8b968f66b2e0d8469b3101/pybalmorel-1.2.3-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/bioconda/noarch/snakemake-9.23.1-hdfd78af_1.conda
   sha256: 9dbbb17d231f341e45560a12fe0a52d75c86f71f4d4d6adb7ca97a9b8115edcc
@@ -4502,10 +4502,17 @@ packages:
   - sphinx-book-theme ; extra == 'docs'
   - sphinx-remove-toctrees ; extra == 'docs'
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/d3/98/f0ed5ccd79e1b7da4a17cdba360f1313e672c23bbf51cc83814c230d91d1/pybalmorel-1.2.2-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/d7/60/8518ade380920044cbd16017f564df9dbe4b1cccc2009197c37fa7122f80/pyshp-3.1.0-py3-none-any.whl
+  name: pyshp
+  version: 3.1.0
+  sha256: 2be9019e32d06f67860ade60d6baf8a93f1547438903245f884ae96445a8e71a
+  requires_dist:
+  - pyshp-stubs ; extra == 'stubs'
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/d9/23/8ac6130a4b402b218c056d5855d0d32842665f8b968f66b2e0d8469b3101/pybalmorel-1.2.3-py3-none-any.whl
   name: pybalmorel
-  version: 1.2.2
-  sha256: 758c634ee79f18ae1326193f88276f8004ec87dd1049d835a6b4972a793fd20d
+  version: 1.2.3
+  sha256: 17f74bdf7a0d36ac3d73df38e9d9c29625ea85510441f03bba8190e3f6c8ab41
   requires_dist:
   - pandas>=2.1.4
   - matplotlib>=3.9.0
@@ -4517,10 +4524,3 @@ packages:
   - xlsxwriter>=3.2.0 ; extra == 'weatheryear'
   - pyyaml>=6.0 ; extra == 'weatheryear'
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/d7/60/8518ade380920044cbd16017f564df9dbe4b1cccc2009197c37fa7122f80/pyshp-3.1.0-py3-none-any.whl
-  name: pyshp
-  version: 3.1.0
-  sha256: 2be9019e32d06f67860ade60d6baf8a93f1547438903245f884ae96445a8e71a
-  requires_dist:
-  - pyshp-stubs ; extra == 'stubs'
-  requires_python: '>=3.9'
