@@ -1,0 +1,48 @@
+name: Reproduction
+
+on:
+    schedule:
+        - cron: "0 3 8 * *" # Runs every eighth day of the month at 3am.
+    push:
+        branches:
+            - main
+    pull_request:
+
+defaults:
+    run:
+        shell: bash -l {0}
+
+jobs:
+    reproduce:
+        name: Reproduce the demo analysis
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install TeX Live (latexmk + pdflatex)
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y --no-install-recommends \
+                      texlive-latex-base texlive-latex-recommended \
+                      texlive-latex-extra texlive-fonts-recommended \
+                      texlive-science latexmk
+
+            - name: Setup Pixi environment
+              uses: prefix-dev/setup-pixi@v0.8.1
+              with:
+                  pixi-version: v0.67.2
+
+            - name: Reproduce results
+              run: pixi run snakemake --cores 2
+
+            - name: Generate DAG
+              run: pixi run snakemake dag --cores 1
+
+            - name: Archive build
+              if: success()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-artifacts
+                  path: build/
+                  if-no-files-found: warn
+                  retention-days: 14

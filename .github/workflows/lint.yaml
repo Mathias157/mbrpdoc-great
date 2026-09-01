@@ -1,0 +1,30 @@
+name: Lint
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+
+jobs:
+    ruff:
+        name: Ruff (Python)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: astral-sh/ruff-action@v3
+              with:
+                  args: check --output-format=github
+
+    yamllint:
+        name: Yamllint (configs)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Install yamllint
+              run: pip install yamllint
+            - name: Run yamllint
+              run: |
+                  yamllint -d "{extends: relaxed, rules: {line-length: disable}}" \
+                      config/ profiles/ \
+                      .github/workflows/

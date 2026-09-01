@@ -1,0 +1,249 @@
+"""Formatting of plots"""
+
+# ------------------------------- #
+#        0. Script Settings       #
+# ------------------------------- #
+
+import cmcrameri.cm as cmc
+import matplotlib.pyplot as plt
+import yaml
+
+# ------------------------------- #
+#          1. Functions           #
+# ------------------------------- #
+
+
+def setup_plot(
+    colourmap: str = "",
+    dark: bool = False,
+    colour_range: tuple = tuple(range(0, 255, 52)),
+):
+    """
+    Replace matplotlib's default colormap with cmcrameri (perceptually uniform,
+    color-deficiency friendly) and set related style parameters.
+
+    Returns: facecolor (str): Value for ax.set_facecolor function
+    """
+
+    if colourmap == "":
+        with open("config/default.yaml", "r") as f:
+            config = yaml.safe_load(f)
+        if dark:
+            colourmap = config["dark_colourmap"]
+        else:
+            colourmap = config["white_colourmap"]
+        print(f"setting colourmap to {colourmap}")
+
+    if dark:
+        plt.style.use("dark_background")
+        facecolor = "none"  # Facecolor
+    else:
+        facecolor = "white"
+
+    # Set default colormap to 'batlow' (perceptually uniform, works for ~95% color vision)
+    plt.rcParams["image.cmap"] = "cmc." + colourmap
+
+    # Optional: set line color cycle for multi-line plots
+    # Uses a subset of cmcrameri colors that are distinguishable across color-vision deficiencies
+    plt.rcParams["axes.prop_cycle"] = plt.cycler(  # type: ignore
+        color=[getattr(cmc, colourmap)(i) for i in colour_range]
+    )
+
+    # Improve figure defaults
+    plt.rcParams["figure.figsize"] = (7, 4)
+    plt.rcParams["figure.dpi"] = 100
+    plt.rcParams["savefig.dpi"] = 300
+    plt.rcParams["font.size"] = 11
+
+    return facecolor
+
+
+B2A_regi = {
+    "AL": ["AL00"],
+    "AT": ["AT00"],
+    "BA": ["BA00"],
+    "BE": ["BE00"],
+    "BG": ["BG00"],
+    "CH": ["CH00"],
+    "CY": ["CY00"],
+    "CZ": ["CZ00"],
+    "DE": ["DE00"],
+    "DK1": ["DKW1"],
+    "DK2": ["DKE1"],
+    "EE": ["EE00"],
+    "ES": ["ES00"],
+    "FIN": ["FI00"],
+    "FR00": ["FR00"],
+    "FR15": ["FR15"],
+    "GR00": ["GR00"],
+    "GR03": ["GR03"],
+    "HR": ["HR00"],
+    "HU": ["HU00"],
+    "IE": ["IE00"],
+    "ITCA": ["ITCA"],
+    "ITCN": ["ITCN"],
+    "ITCS": ["ITCS"],
+    "ITCO": ["ITCO"],
+    "ITN1": ["ITN1"],
+    "ITS1": ["ITS1"],
+    "ITSA": ["ITSA"],
+    "ITSI": ["ITSI"],
+    "LT": ["LT00"],
+    "LU": ["LU00"],
+    "LV": ["LV00"],
+    "ME": ["ME00"],
+    "MK": ["MK00"],
+    "MT": ["MT00"],
+    "NL": ["NL00"],
+    "NOS": ["NOS0"],
+    "NO3": ["NOM1"],
+    "NO4": ["NON1"],
+    "PL": ["PL00"],
+    "PT": ["PT00"],
+    "RO": ["RO00"],
+    "RS": ["RS00"],
+    "SE1": ["SE01"],
+    "SE2": ["SE02"],
+    "SE3": ["SE03"],
+    "SE4": ["SE04"],
+    "SI": ["SI00"],
+    "SK": ["SK00"],
+    "TR": ["TR00"],
+    "UK00": ["UK00"],
+    "UKNI": ["UKNI"],
+}
+
+A2B_regi = {
+    "AL00": ["AL"],
+    "AT00": ["AT"],
+    "BA00": ["BA"],
+    "BE00": ["BE"],
+    "BG00": ["BG"],
+    "CH00": ["CH"],
+    "CY00": ["CY"],
+    "CZ00": ["CZ"],
+    "DE00": ["DE"],
+    "DKW1": ["DK1"],
+    "DKE1": ["DK2"],
+    "EE00": ["EE"],
+    "ES00": ["ES"],
+    "FI00": ["FIN"],
+    "FR00": ["FR00"],
+    "FR15": ["FR15"],
+    "GR00": ["GR00"],
+    "GR03": ["GR03"],
+    "HR00": ["HR"],
+    "HU00": ["HU"],
+    "IE00": ["IE"],
+    "ITCA": ["ITCA"],
+    "ITCN": ["ITCN"],
+    "ITCS": ["ITCS"],
+    "ITCO": ["ITCO"],
+    "ITN1": ["ITN1"],
+    "ITS1": ["ITS1"],
+    "ITSA": ["ITSA"],
+    "ITSI": ["ITSI"],
+    "LT00": ["LT"],
+    "LU00": ["LU"],
+    "LV00": ["LV"],
+    "ME00": ["ME"],
+    "MK00": ["MK"],
+    "MT00": ["MT"],
+    "NL00": ["NL"],
+    "NOS0": ["NOS"],
+    "NOM1": ["NO3"],
+    "NON1": ["NO4"],
+    "PL00": ["PL"],
+    "PT00": ["PT"],
+    "RO00": ["RO"],
+    "RS00": ["RS"],
+    "SE01": ["SE1"],
+    "SE02": ["SE2"],
+    "SE03": ["SE3"],
+    "SE04": ["SE4"],
+    "SI00": ["SI"],
+    "SK00": ["SK"],
+    "TR00": ["TR"],
+    "UK00": ["UK00"],
+    "UKNI": ["UKNI"],
+}
+
+tynd_to_balmorel = {
+    "AT00": "AT",
+    "BE00": "BE",
+    "BG00": "BG",
+    "CH00": "CH",
+    "DE00": ["DE4-E", "DE4-N", "DE4-S", "DE4-W"],
+    "DE": ["DE4-E", "DE4-N", "DE4-S", "DE4-W"],
+    "DEKF": "DE4-E",
+    "DKW1": "DK1",
+    "DK": "DK1",
+    "ES00": "ES",
+    "FR00": "FR",
+    "FR15": "FR",
+    "IE00": "IE",
+    "UK00": "UK",
+    "BA00": "BA",
+    "CZ00": "CZ",
+    "CY00": "CY",
+    "DZ00": None,
+    "EE00": "EE",
+    "EG00": None,
+    "FI00": "FIN",
+    "FI": "FIN",
+    "IBFI": "FIN",
+    "GR00": "GR",
+    "GR03": "GR",
+    "HR00": "HR",
+    "HU00": "HU",
+    "ITCS": "IT",
+    "ITCO": "IT",
+    "IL00": None,
+    "LT00": "LT",
+    "LV00": "LV",
+    "SE02": "SE2",
+    "ITN1": "IT",
+    "ITSI": "IT",
+    "NL00": "NL",
+    "NOS0": ["NO1", "NO2", "NO5"],
+    "AL00": "AL",
+    "DKE1": "DK2",
+    "DKKF": "DK2",
+    "ME00": "ME",
+    "MA00": None,
+    "MK00": "MK",
+    "NOM1": "NO3",
+    "NON1": "NO4",
+    "MD00": None,
+    "PL00I": "PL",
+    "PL00": "PL",
+    "PL00E": "PL",
+    "RO00": "RO",
+    "SE01": "SE1",
+    "SE03": "SE3",
+    "ITCN": "IT",
+    "ITS1": "IT",
+    "ITSA": "IT",
+    "ITSIvirt": None,
+    "IBIT": "IT",
+    "IS00": None,
+    "SI00": "SI",
+    "LUG1": "LU",
+    "LUB1": "LU",
+    "LUV1": "LU",
+    "LUF1": "LU",
+    "LY00": None,
+    "MT00": "MT",
+    "TR00": "TR",
+    "UKNI": "IE",
+    "PS00": None,
+    "RS00": "RS",
+    "SK00": "SK",
+    "SE04": "SE4",
+    "SE": ["SE1", "SE2", "SE3", "SE4"],
+    "PT00": "PT",
+    "TN00": None,
+    "ITCA": "IT",
+    "UA00": None,
+    "UA01": None,
+}
