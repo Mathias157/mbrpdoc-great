@@ -68,3 +68,4 @@ scripts/plots/
 report/figures
 build_postproces*/
 logs/
+.git
