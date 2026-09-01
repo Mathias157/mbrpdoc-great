@@ -393,7 +393,7 @@ def main(
     if year is None:
         raise click.ClickException(f"No Year found for scenario {scenario!r} in EL_DEMAND_YCRST.")
 
-    ev_dumb_fraction = _load_ev_dumb_fraction()
+    ev_dumb_fraction = _load_ev_dumb_fraction(Path(balmorel_path), folder)
     dumb_hourly, smart_hourly = _split_ev_dumb(el, ev_dumb_fraction, scenario, year)
     dumb_country_hourly = dumb_hourly.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
 

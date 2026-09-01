@@ -42,6 +42,13 @@ lets `plot_flexibility_needs.py` derive a disaggregated by-option view the
 same way it derives disaggregated residual load, instead of the aggregate
 tables' own spatial-summing-before-decomposition blind spot.
 
+EV charging's dumb/inflexible share (see `_load_ev_dumb_fraction`) is read
+per scenario - from that scenario's own `data/EV_BEV_dumb.inc` when present,
+falling back to `base/data/EV_BEV_dumb.inc` otherwise - not once globally,
+so a sweep over dumb-charging share across scenarios actually reflects each
+scenario's own setting instead of whatever was last hand-edited into the
+shared base file (see docs/adr/0021).
+
 Compute-only - writes flexibility_needs.csv and nothing else. Reading the
 GDX results this needs (particularly PRO_YCRAGFST) is the expensive part of
 this pipeline stage, both in time and RAM, even with the .gdx_cache/*.pkl
@@ -195,29 +202,61 @@ def _filter_area(df: pd.DataFrame, spec: dict) -> pd.DataFrame:
     return df
 
 
-def _load_ev_dumb_fraction() -> pd.DataFrame:
+def _table_start(lines: list) -> int | None:
+    """Index of the first active (uncommented) `TABLE` line, or None if the
+    file has no active table - e.g. a per-scenario EV_BEV_dumb.inc whose
+    whole table is commented out (`* TABLE ...`), the same placeholder
+    pattern already present for D100/D50/D25/etc.'s own `data/` folders."""
+    return next((i for i, line in enumerate(lines) if line.strip().startswith("TABLE")), None)
+
+
+def _load_ev_dumb_fraction(balmorel_path: Path, scfolder: str) -> pd.DataFrame:
     """(Year, Region, dumb_fraction) parsed from EV_BEV_dumb.inc - the
     year x region fraction of EV charging that's dumb/inflexible (a lower
-    bound on VEV_G2V_BEV, see docs/adr/0016/0017). EV_PHEV_dumb.inc carries
-    identical values to EV_BEV_dumb.inc in this dataset (checked directly)
-    so only one is read - the aggregated ENDO_EV series has no BEV/PHEV
-    split to apply them separately against anyway. Does not apply the
-    RollingSeasons=yes x0.1 adjustment EV_BEV_dumb.inc's last line encodes -
-    a further reduction on an already-negligible (0.001 in 2050) fraction,
-    skipped rather than plumbing rolling/fullyear run-type detection through
-    for a sub-0.1% effect."""
-    path = Path(__file__).parent.parent / "Balmorel" / "base" / "data" / "EV_BEV_dumb.inc"
-    lines = path.read_text().splitlines()
-    header_idx = next(i for i, line in enumerate(lines) if line.strip().startswith("TABLE"))
-    regions = lines[header_idx + 1].split()
-    rows = []
-    for line in lines[header_idx + 2:]:
-        stripped = line.strip()
-        if not stripped or stripped.startswith(";") or stripped.startswith("$"):
-            break
-        year, *values = stripped.split()
-        rows.extend((year, region, float(value)) for region, value in zip(regions, values))
-    return pd.DataFrame(rows, columns=["Year", "Region", "dumb_fraction"])
+    bound on VEV_G2V_BEV, see docs/adr/0016/0017/0021). EV_PHEV_dumb.inc
+    carries identical values to EV_BEV_dumb.inc in this dataset (checked
+    directly) so only one is read - the aggregated ENDO_EV series has no
+    BEV/PHEV split to apply them separately against anyway.
+
+    Read per-scenario (see docs/adr/0021): tries `<scfolder>/data/
+    EV_BEV_dumb.inc` first - Balmorel's own scenario-linking convention for
+    a scenario to override a base/data/*.inc file, same precedent as
+    D100/D50/etc.'s own per-scenario `data/` folders - and falls back to
+    `base/data/EV_BEV_dumb.inc` when no scenario-specific file exists, or
+    when one exists but its table is fully commented out (inactive
+    placeholder). A single shared value read once for every scenario in a
+    batch (the previous behaviour) silently applied whatever was last
+    hand-edited into the base file to every scenario, regardless of what
+    dumb-charging share that scenario was actually run with - confirmed via
+    a local sweep that varied EV_BEV_dumb between HPC runs by hand-editing
+    this same base file each time, which left the postprocessing unable to
+    tell one run's share from another's.
+
+    Does not apply the RollingSeasons=yes x0.1 adjustment EV_BEV_dumb.inc's
+    last line encodes - a further reduction on an already-negligible (0.001
+    in 2050) fraction, skipped rather than plumbing rolling/fullyear
+    run-type detection through for a sub-0.1% effect."""
+    scenario_path = balmorel_path / scfolder / "data" / "EV_BEV_dumb.inc"
+    base_path = balmorel_path / "base" / "data" / "EV_BEV_dumb.inc"
+    for path in (scenario_path, base_path):
+        if not path.exists():
+            continue
+        lines = path.read_text().splitlines()
+        header_idx = _table_start(lines)
+        if header_idx is None:
+            continue
+        regions = lines[header_idx + 1].split()
+        rows = []
+        for line in lines[header_idx + 2:]:
+            stripped = line.strip()
+            if not stripped or stripped.startswith(";") or stripped.startswith("$"):
+                break
+            year, *values = stripped.split()
+            rows.extend((year, region, float(value)) for region, value in zip(regions, values))
+        return pd.DataFrame(rows, columns=["Year", "Region", "dumb_fraction"])
+    raise FileNotFoundError(
+        f"No active EV_BEV_dumb.inc TABLE found in {scenario_path} or {base_path}"
+    )
 
 
 def _split_ev_dumb(
@@ -985,7 +1024,7 @@ def main(
     xh2_flow = _get_result_cached(res, "XH2_FLOW_YCRST", cache_dir, overwrite_cache)
     region_to_country = region_to_country_map(pro)
     demand_symbols = {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2}
-    ev_dumb_fraction = _load_ev_dumb_fraction()
+    balmorel_path_obj = Path(balmorel_path)
 
     scenario_names = select_scenario_names(model.scenario_names)
     _log(
@@ -1001,6 +1040,8 @@ def main(
             _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: no target year found, skipping")
             continue
 
+        scfolder = model.scname_to_scfolder[scenario_name]
+        ev_dumb_fraction = _load_ev_dumb_fraction(balmorel_path_obj, scfolder)
         dumb_hourly, smart_hourly = _split_ev_dumb(el, ev_dumb_fraction, scenario_name, year)
         dumb_country_hourly = (
             dumb_hourly.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
