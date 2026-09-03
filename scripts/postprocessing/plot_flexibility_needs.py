@@ -49,12 +49,20 @@ Created on 20.08.2026
 # ------------------------------- #
 
 import colorsys
+import re
+import sys
 from pathlib import Path
+
+# Add repo root to path for scripts.utils imports (see AGENTS.md's
+# pybalmorel/import-path note).
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import click
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from scripts.utils import setup_plot
 
 # ------------------------------- #
 #          1. Functions           #
@@ -66,6 +74,23 @@ import pandas as pd
 # pybalmorel import chain (the whole point of the split, see module
 # docstring) - it's three fixed strings, not worth the coupling.
 COMMODITIES = ("ELECTRICITY", "HEAT", "HYDROGEN")
+
+# Trailing run-type+year suffix on a scenario name (see
+# categorize_countries.RUN_TYPE_RE) - kept as its own copy for the same
+# GDX-independence reason as COMMODITIES above, not imported.
+SCENARIO_SUFFIX_RE = re.compile(r"_(?:F|R)\d{4}$")
+
+
+def _display_scenarios(scenarios: list, clean: bool) -> list:
+    """Scenario names for x-tick labels, e.g. "base_R2050" -> "base" when
+    `clean` (see SCENARIO_SUFFIX_RE). Only affects axis labels - callers
+    still filter/index rows by the raw, unstripped `scenarios` list, so two
+    scenarios that only differ by run-type/year (e.g. base_R2030 vs.
+    base_R2050) would show identical labels rather than collide in the
+    data itself."""
+    if not clean:
+        return scenarios
+    return [SCENARIO_SUFFIX_RE.sub("", s) for s in scenarios]
 
 
 def _shades(anchor_hex: str, lightnesses: dict) -> dict:
@@ -196,6 +221,7 @@ def _stack_bars(
     scenarios: list,
     width: float,
     show_total_line: bool = False,
+    dark: bool = False,
 ) -> None:
     """Draws one stacked bar per `x` position (scenario): each `hues` value's
     flex_need_twh is stacked in turn - positive values upward from the
@@ -226,6 +252,7 @@ def _stack_bars(
     bottom_neg = np.zeros(len(x))
     cmap = plt.get_cmap("tab20")
     totals = np.zeros(len(x))
+    line_colour = "white" if dark else "black"
     for i, hue in enumerate(hues):
         color = _colour_for(hue_col, hue, i, cmap)
         heights = np.array([
@@ -241,13 +268,13 @@ def _stack_bars(
         bottom_pos += pos
         bottom_neg += neg
         totals += heights
-    ax.axhline(0, color="black", linewidth=0.8)
+    ax.axhline(0, color=line_colour, linewidth=0.8)
     if show_total_line:
         ax.hlines(
             totals,
             x - width / 2,
             x + width / 2,
-            colors="black",
+            colors=line_colour,
             linestyles="dashed",
             linewidth=1.5,
             label="Total flexibility need",
@@ -278,7 +305,7 @@ def _shared_ylim(
 
 
 def plot_flexibility_needs(
-    rows: pd.DataFrame, title: str, output_path: Path, hue_col: str = "group"
+    rows: pd.DataFrame, title: str, output_path: Path, hue_col: str = "group", dark: bool = False, clean: bool = False
 ) -> None:
     """One figure, one panel per timescale: x-axis = scenario, one *stacked*
     bar per timescale (each `hue_col` value stacked in turn, see
@@ -305,9 +332,10 @@ def plot_flexibility_needs(
             scenarios,
             width,
             show_total_line=(hue_col == "flex_option"),
+            dark=dark,
         )
         ax.set_xticks(x)
-        ax.set_xticklabels(scenarios, rotation=45, ha="right")
+        ax.set_xticklabels(_display_scenarios(scenarios, clean), rotation=45, ha="right")
         ax.set_title(f"{timescale} flexibility need")
         ax.set_ylabel("Flexibility need [TWh/a]")
         ax.set_ylim(ylim)
@@ -328,7 +356,7 @@ def plot_flexibility_needs(
 
 
 def plot_flex_option_category_grid(
-    rows: pd.DataFrame, title: str, output_path: Path
+    rows: pd.DataFrame, title: str, output_path: Path, dark: bool = False, clean: bool = False
 ) -> None:
     """Grid: one row per Combined category, one column per timescale; each
     subplot stacks scenario x flex option (see `_stack_bars`, including the
@@ -368,10 +396,11 @@ def plot_flex_option_category_grid(
                 scenarios,
                 width,
                 show_total_line=True,
+                dark=dark,
             )
             ax.set_ylim(row_ylim)
             ax.set_xticks(x)
-            ax.set_xticklabels(scenarios, rotation=45, ha="right")
+            ax.set_xticklabels(_display_scenarios(scenarios, clean), rotation=45, ha="right")
             if row_i == 0:
                 ax.set_title(f"{timescale} flexibility need")
             if col_i == 0:
@@ -421,10 +450,25 @@ def plot_flex_option_category_grid(
     default=(),
     help="Also plot one country's own flexibility-option breakdown (group_type=flex_option_country), "
     "e.g. --country DENMARK, repeatable. Table rows for every country are always in the CSV either "
-    "way (see docs/adr/0020) - this only opts into a plot for the ones named here, not one PNG per "
+    "way (see docs/adr/0020) - this only opts into a plot for the ones named here, not one image per "
     "country by default.",
 )
-def main(output_dir: str, table_csv: str, countries: tuple):
+@click.option("--dark", is_flag=True, help="Make dark plot?")
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["png", "svg", "pdf"]),
+    default="png",
+    show_default=True,
+    help="Output image format for every plot written.",
+)
+@click.option(
+    "--clean",
+    is_flag=True,
+    help="Strip the _F<year>/_R<year> run-type suffix from scenario names in axis labels, e.g. 'base_R2050' -> 'base'.",
+)
+def main(output_dir: str, table_csv: str, countries: tuple, dark: bool, fmt: str, clean: bool):
+    setup_plot(dark=dark)
     output_path = Path(output_dir)
     plots_dir = output_path / "flex_needs_plots"
 
@@ -457,7 +501,9 @@ def main(output_dir: str, table_csv: str, countries: tuple):
             plot_flexibility_needs(
                 subset,
                 f"{label}, {commodity}, aggregate",
-                plots_dir / f"{label}_aggregate_{commodity}.png",
+                plots_dir / f"{label}_aggregate_{commodity}.{fmt}",
+                dark=dark,
+                clean=clean,
             )
 
         # --- Disaggregated residual-load views: derived here by summing the
@@ -477,7 +523,9 @@ def main(output_dir: str, table_csv: str, countries: tuple):
             plot_flexibility_needs(
                 system_disaggregated,
                 f"system, {commodity}, disaggregated",
-                plots_dir / f"system_disaggregated_{commodity}.png",
+                plots_dir / f"system_disaggregated_{commodity}.{fmt}",
+                dark=dark,
+                clean=clean,
             )
 
             category_disaggregated = (
@@ -490,7 +538,9 @@ def main(output_dir: str, table_csv: str, countries: tuple):
                 plot_flexibility_needs(
                     category_disaggregated,
                     f"category, {commodity}, disaggregated",
-                    plots_dir / f"category_disaggregated_{commodity}.png",
+                    plots_dir / f"category_disaggregated_{commodity}.{fmt}",
+                    dark=dark,
+                    clean=clean,
                 )
 
         # --- Aggregate flex-option views (same copper-plate bound, applied
@@ -502,8 +552,10 @@ def main(output_dir: str, table_csv: str, countries: tuple):
             plot_flexibility_needs(
                 option_system_rows,
                 f"flexibility options, system-wide, aggregate ({commodity})",
-                plots_dir / f"system_by_option_aggregate_{commodity}.png",
+                plots_dir / f"system_by_option_aggregate_{commodity}.{fmt}",
                 hue_col="flex_option",
+                dark=dark,
+                clean=clean,
             )
 
         option_category_rows = by_commodity[
@@ -513,7 +565,9 @@ def main(output_dir: str, table_csv: str, countries: tuple):
             plot_flex_option_category_grid(
                 option_category_rows,
                 f"{commodity}, aggregate",
-                plots_dir / f"category_by_option_aggregate_{commodity}.png",
+                plots_dir / f"category_by_option_aggregate_{commodity}.{fmt}",
+                dark=dark,
+                clean=clean,
             )
 
         # --- Disaggregated flex-option views: summed from the CSV's
@@ -530,8 +584,10 @@ def main(output_dir: str, table_csv: str, countries: tuple):
             plot_flexibility_needs(
                 system_by_option_disaggregated,
                 f"flexibility options, system-wide, disaggregated ({commodity})",
-                plots_dir / f"system_by_option_disaggregated_{commodity}.png",
+                plots_dir / f"system_by_option_disaggregated_{commodity}.{fmt}",
                 hue_col="flex_option",
+                dark=dark,
+                clean=clean,
             )
 
             category_by_option_disaggregated = (
@@ -544,7 +600,9 @@ def main(output_dir: str, table_csv: str, countries: tuple):
                 plot_flex_option_category_grid(
                     category_by_option_disaggregated,
                     f"{commodity}, disaggregated",
-                    plots_dir / f"category_by_option_disaggregated_{commodity}.png",
+                    plots_dir / f"category_by_option_disaggregated_{commodity}.{fmt}",
+                    dark=dark,
+                    clean=clean,
                 )
 
             # --- Optional: one named country's own flex-option breakdown. ---
@@ -556,8 +614,10 @@ def main(output_dir: str, table_csv: str, countries: tuple):
                 plot_flexibility_needs(
                     country_subset,
                     f"flexibility options, {country} ({commodity})",
-                    plots_dir / f"country_by_option_{country}_{commodity}.png",
+                    plots_dir / f"country_by_option_{country}_{commodity}.{fmt}",
                     hue_col="flex_option",
+                    dark=dark,
+                    clean=clean,
                 )
 
     print(f"Wrote plots to {plots_dir}.")

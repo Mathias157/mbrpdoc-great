@@ -52,6 +52,7 @@ from decouple import config
 from pybalmorel import Balmorel
 
 from scripts.postprocessing.aggregate_category_costs import build_reference_category_map
+from scripts.utils import setup_plot
 from scripts.postprocessing.categorize_countries import (
     region_to_country_map,
     scenario_target_year,
@@ -341,9 +342,18 @@ def plot_flex_option_illustration(
 )
 @click.option("--balmorel-path", type=str, default="scripts/Balmorel", help="Path to the top level of Balmorel scenario folders")
 @click.option("--gams-sysdir", type=str, default=config("GAMS_SYSTEM_DIR", default=None), help="Path to GAMS system directory")
-@click.option("--output-dir", type=str, default="build_postprocess", help="Where to write flex_illustration/*.png")
+@click.option("--output-dir", type=str, default="build_postprocess", help="Where to write flex_illustration/*")
 @click.option("--categorization-csv", type=str, default=None, help="Path to categorize_countries.py's output. Defaults to <output-dir>/categorization.csv")
 @click.option("--reference-scenario", type=str, default="base_R2050", help="Scenario whose Combined category assignment is used (see docs/adr/0004)")
+@click.option("--dark", is_flag=True, help="Make dark plot?")
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["png", "svg", "pdf"]),
+    default="png",
+    show_default=True,
+    help="Output image format for every plot written.",
+)
 def main(
     scenario: str,
     commodity: str,
@@ -357,7 +367,10 @@ def main(
     output_dir: str,
     categorization_csv: str,
     reference_scenario: str,
+    dark: bool,
+    fmt: str,
 ):
+    setup_plot(dark=dark)
     output_path = Path(output_dir) / "flex_illustration"
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -433,7 +446,7 @@ def main(
 
     title = f"{scenario} | {commodity} | {group_type}={group}"
     safe_group = group.replace(" ", "_").replace("/", "-")
-    residual_path = output_path / f"{scenario}__{commodity}__{group_type}-{safe_group}__residual.png"
+    residual_path = output_path / f"{scenario}__{commodity}__{group_type}-{safe_group}__residual.{fmt}"
     plot_residual_illustration(working, needs, list(timescales), window_range, title, residual_path)
     print(f"Wrote {residual_path}")
 
@@ -456,7 +469,7 @@ def main(
         option_working = _augment(option_hourly)
         colour = FLEX_OPTION_COLOURS.get(flex_option)
         safe_option = flex_option.replace(" ", "_")
-        option_path = output_path / f"{scenario}__{commodity}__{group_type}-{safe_group}__{safe_option}.png"
+        option_path = output_path / f"{scenario}__{commodity}__{group_type}-{safe_group}__{safe_option}.{fmt}"
         plot_flex_option_illustration(
             option_working, sign, provision, list(timescales), window_range, flex_option, title, option_path, colour
         )

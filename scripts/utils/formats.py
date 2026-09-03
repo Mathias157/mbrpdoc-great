@@ -37,8 +37,20 @@ def setup_plot(
     if dark:
         plt.style.use("dark_background")
         facecolor = "none"  # Facecolor
+        # dark implies transparent: figure/axes/savefig backgrounds are all
+        # 'none' and savefig defaults to transparent, so callers get a
+        # transparent-background dark plot without touching their own
+        # plt.subplots()/fig.savefig() calls.
+        plt.rcParams["axes.facecolor"] = "none"
+        plt.rcParams["figure.facecolor"] = "none"
+        plt.rcParams["savefig.facecolor"] = "none"
+        plt.rcParams["savefig.transparent"] = True
     else:
         facecolor = "white"
+        plt.rcParams["axes.facecolor"] = "white"
+        plt.rcParams["figure.facecolor"] = "white"
+        plt.rcParams["savefig.facecolor"] = "white"
+        plt.rcParams["savefig.transparent"] = False
 
     # Set default colormap to 'batlow' (perceptually uniform, works for ~95% color vision)
     plt.rcParams["image.cmap"] = "cmc." + colourmap
