@@ -13,16 +13,11 @@ weatheryear_inputs_folder: data/weatheryear_inputs
 ###########################################################################################################################
 
 turbine_to_keep:
-  - SP335-HH100
   - SP277-HH100
-  - SP277-HH150
+  - SP199-HH100
   - SP199-HH150
   - SP316-HH155
 
-
-PV_to_keep:
-  - PV_Utility_scale_no_tracking
-  - PV_Utility_scale_tracking
 
 tech_to_keep:
   - Future_Onshore
