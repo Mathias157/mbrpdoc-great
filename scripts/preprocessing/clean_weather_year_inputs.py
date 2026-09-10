@@ -47,6 +47,9 @@ mechanism, not assumed):
   - see docs/adr/0021 for why the base has to load *first* here too, for a
   different reason than WTRRRFLH/WTRRSFLH (a later plain assignment always
   overwrites, regardless of $onMulti, so the base can't safely go last).
+  DH_VAR_T.inc (and DH_INC_CONTENT's DH.inc, below) additionally pulls in
+  base's INDIVUSERS_DH.inc/INDIVUSERS_DH_VAR_T.inc directly - see
+  docs/adr/0022.
 - FILES_NEEDING_T001_DEDUP (currently just WTRRSVAR_S_WY.inc): workaround
   for an upstream pybalmorel WEATHERYEAR bug that gives this (AAA,SSS)-only
   parameter a spurious T dimension. Applied on top of RENAME_FILES.
@@ -206,8 +209,17 @@ ALBANIA_WIND_FALLBACK = {
 # list, which GAMS allows without $onMulti (confirmed: only a second data
 # *list* into an already-populated symbol needs $onMulti, not a bare
 # re-declaration) - see docs/adr/0021.
+#
+# `$include '../../base/data/INDIVUSERS_DH.inc';` right after base DH: that
+# file assigns straight into DH(...) itself (individual-user IDVU-HOTWTR/
+# IDVU-SPACEHEAT areas, not a separate parameter) - without it, WY folders'
+# own empty data/INDIVUSERS_DH.inc (see create_weather_year_scenarios.py)
+# leaves those areas with positive DH but no source, since the indivusers
+# addon's own indivusers_dhadditions.inc reads that same empty file instead
+# of falling back to base. See docs/adr/0022.
 DH_INC_CONTENT = (
     "$include '../../base/data/DH.inc';\n"
+    "$include '../../base/data/INDIVUSERS_DH.inc';\n"
     "$include '../data/DH_RESH.inc';\n"
     "$include '../data/DH_RESIDENTIAL.inc';\n"
     "$include '../data/DH_TERTIARY.inc';\n"
@@ -221,9 +233,20 @@ DH_INC_CONTENT = (
 # region/time combination they don't touch. Since these are plain
 # assignments (not a $onMulti data list), no $onMulti is needed here
 # either - see docs/adr/0021.
+# DH_VAR_T.inc additionally gets INDIVUSERS_DH_VAR_T.inc's own base
+# fallback prepended right after - same reasoning as DH_INC_CONTENT's
+# INDIVUSERS_DH.inc include above (see docs/adr/0022): that file assigns
+# straight into DH_VAR_T(...) for the same IDVU-HOTWTR/IDVU-SPACEHEAT
+# areas, and without it the indivusers addon's own empty WY-folder
+# override (data/INDIVUSERS_DH_VAR_T.inc) leaves those areas with no
+# profile for whatever the year-specific DH_VAR_T_RESIDENTIAL/RESH/
+# TERTIARY assignments below don't cover.
 CONCAT_FILE_BASE_INCLUDE = {
     "DE_VAR_T.inc": "$include '../../base/data/DE_VAR_T.inc';\n",
-    "DH_VAR_T.inc": "$include '../../base/data/DH_VAR_T.inc';\n",
+    "DH_VAR_T.inc": (
+        "$include '../../base/data/DH_VAR_T.inc';\n"
+        "$include '../../base/data/INDIVUSERS_DH_VAR_T.inc';\n"
+    ),
 }
 
 _RG_OFF_TO_BARE = {"RG1_OFF": "RG1", "RG2_OFF": "RG2", "RG3_OFF": "RG3"}

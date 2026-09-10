@@ -31,10 +31,17 @@ pre-created here either):
   files (already staged into this same `data/` folder by the WY job
   scripts' bulk copy from weatheryeardata) alongside the fixed,
   non-weather-dependent ground-source COP data. See docs/adr/0015.
-- `data/INDIVUSERS_DH_VAR_T.inc`: written empty. Suppresses the
-  `INDIVUSERS_DH_VAR_T` addon (not weather-year aware and deliberately not
-  wanted for weather year runs) instead of silently falling back to the
-  source scenario's non-weather-year data - see docs/adr/0015.
+- `data/INDIVUSERS_DH.inc`/`data/INDIVUSERS_DH_VAR_T.inc`: written empty.
+  These are the `indivusers` addon's own override slots
+  (`indivusers_dhadditions.inc`/`indivusers_dh_var_tadditions.inc`), kept
+  empty so the addon doesn't separately re-apply base's individual-user
+  heat data - it's already pulled directly into `DH.inc`/`DH_VAR_T.inc` by
+  `clean_weather_year_inputs.py`. An empty file here (rather than no file
+  at all) satisfies the addon's own `$if EXIST` check as a no-op instead of
+  letting it fall back to base independently. See docs/adr/0015 (original
+  suppression decision) and docs/adr/0022 (why suppression alone left DH
+  positive with no profile, and how it's routed in through DH.inc/
+  DH_VAR_T.inc instead).
 
 Never touches HPC or Snakemake - this is local scaffolding, meant to be
 `rsync`'d up (`pixi run sync-up`) and run via `jobs/slurm/submit_weather_years.sh`
@@ -66,6 +73,7 @@ MODEL_FILES_TO_COPY = [
     "cplex.op2",
     "cplex.op4",
     "balopt_full.opt",
+    "balopt_inv.opt",
     "balopt_roll.opt",
 ]
 
@@ -95,10 +103,22 @@ $include '../data/SEASONALCOP_COP_VAR_T_WY_air_air.inc';
 $include '../data/SEASONALCOP_COP_VAR_T_WY_air_water.inc';
 """
 
+_INDIVUSERS_DH_EMPTY = """\
+* Deliberately empty. INDIVUSERS_DH.inc/INDIVUSERS_DH_VAR_T.inc assign
+* straight into DH(...)/DH_VAR_T(...) for individual-user IDVU-HOTWTR/
+* IDVU-SPACEHEAT areas - clean_weather_year_inputs.py's DH_INC_CONTENT
+* already pulls base's real data for those in directly via DH.inc, so this
+* file only needs to exist (satisfying the indivusers addon's own
+* indivusers_dhadditions.inc $if EXIST check) as a no-op that keeps that
+* addon from applying the same data a second time. See docs/adr/0022.
+"""
+
 _INDIVUSERS_DH_VAR_T_EMPTY = """\
-* Deliberately empty - weather year runs suppress INDIVUSERS_DH_VAR_T
-* rather than falling back to the source scenario's non-weather-year-aware
-* data. See docs/adr/0015.
+* Deliberately empty - see _INDIVUSERS_DH_EMPTY's comment (DH_VAR_T side:
+* clean_weather_year_inputs.py's CONCAT_FILE_BASE_INCLUDE pulls base's
+* INDIVUSERS_DH_VAR_T.inc into DH_VAR_T.inc directly instead). This file
+* only needs to exist for indivusers_dh_var_tadditions.inc's own $if EXIST
+* check to no-op. See docs/adr/0022.
 """
 
 
@@ -130,6 +150,7 @@ def create_weather_year_folder(balmorel_path: Path, scenario: str, year: int) ->
     (target / "data" / "SEASONALCOP_COP_VAR_T.inc").write_text(
         _SEASONALCOP_COP_VAR_T_WRAPPER
     )
+    (target / "data" / "INDIVUSERS_DH.inc").write_text(_INDIVUSERS_DH_EMPTY)
     (target / "data" / "INDIVUSERS_DH_VAR_T.inc").write_text(_INDIVUSERS_DH_VAR_T_EMPTY)
 
     return target
