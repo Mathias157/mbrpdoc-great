@@ -32,6 +32,17 @@ plotted on request via `--country` (table rows for every country are
 always in the CSV either way - see docs/adr/0020 for why there's no
 plotted grid of all of them by default).
 
+A weather-year ensemble (multiple `Scenario` names sharing one source
+scenario, e.g. `base_WY1986_F2050`..`base_WY2020_F2050`, see CONTEXT.md's
+"Weather year run") is auto-detected and summarized into one bar per
+source scenario rather than one per raw Scenario - unreadable otherwise at
+30+ weather years. `--weather-year-stat` (default `mean`) picks
+mean/min/median/max of `flex_need_twh` across the ensemble; this is a
+plain single-statistic bar, not a distribution view - see
+docs/adr/0023/0024. `interannual_flexibility_needs.csv` (also written by
+estimate_flexibility_needs.py) is the complementary number - how much a
+weather-year ensemble actually varies - not plotted by this script yet.
+
 Split out from estimate_flexibility_needs.py (see its own docstring) so
 that iterating on a plot doesn't require re-running the expensive GDX read
 - this script has no GDX/GAMS/pybalmorel dependency at all, only reads a
@@ -79,6 +90,55 @@ COMMODITIES = ("ELECTRICITY", "HEAT", "HYDROGEN")
 # categorize_countries.RUN_TYPE_RE) - kept as its own copy for the same
 # GDX-independence reason as COMMODITIES above, not imported.
 SCENARIO_SUFFIX_RE = re.compile(r"_(?:F|R)\d{4}$")
+
+# Weather-year suffix on a scenario's own base, post SCENARIO_SUFFIX_RE
+# stripping, e.g. "base_WY1986" -> source="base", weather_year="1986" - see
+# estimate_flexibility_needs.py's own copy (categorize_countries.
+# split_weather_year) and docs/adr/0023. Kept as its own copy for the same
+# GDX-independence reason as SCENARIO_SUFFIX_RE above.
+WEATHER_YEAR_RE = re.compile(r"^(?P<source>.+)_WY(?P<weather_year>\d{4})$")
+
+_WEATHER_YEAR_STATS = {"mean": "mean", "min": "min", "median": "median", "max": "max"}
+
+
+def _source_scenario(scenario: str) -> str:
+    """`scenario` with its run-type/year suffix stripped, then its
+    weather-year suffix stripped if present - e.g. "base_WY1986_F2050" ->
+    "base", but "SSN_R2050" -> "SSN" (SCENARIO_SUFFIX_RE alone, no
+    weather-year suffix to strip further). The key every weather year in
+    one ensemble shares."""
+    base = SCENARIO_SUFFIX_RE.sub("", scenario)
+    match = WEATHER_YEAR_RE.match(base)
+    return match.group("source") if match else base
+
+
+def _summarize_weather_years(rows: pd.DataFrame, stat: str) -> pd.DataFrame:
+    """One row per (Scenario, Year, group_type, group, category,
+    flex_option, Commodity, timescale) - unchanged for an ordinary
+    scenario (still its own raw Scenario name, e.g. "SSN_R2050", so
+    `--clean`'s own suffix-stripping keeps working exactly as before) but
+    collapsed to one summary row per *source* scenario (see docs/adr/0023's
+    "Scenario name") wherever that source scenario has more than one
+    distinct weather-year Scenario name present in `rows`. Auto-detected,
+    never opt-in behind a flag: with 30+ weather years, one bar per raw
+    Scenario is unreadable regardless of whether a flag was remembered -
+    `stat` (mean/min/median/max of `flex_need_twh` across weather years) is
+    the only configurable part. Applies uniformly to both need
+    (`group_type` in system/category/country) and provision
+    (`flex_option_*`) rows - the 30-bar unreadability problem is identical
+    for both, see docs/adr/0024's Consequences."""
+    source = rows["Scenario"].map(_source_scenario)
+    ensemble_size = rows.groupby(source)["Scenario"].transform("nunique")
+    display_scenario = source.where(ensemble_size > 1, rows["Scenario"])
+    working = rows.assign(Scenario=display_scenario)
+    group_cols = [c for c in rows.columns if c != "flex_need_twh"]
+    # dropna=False: residual-load rows carry an empty (not NaN) flex_option
+    # in-memory, but empty string fields round-trip through CSV as NaN
+    # (pandas' read_csv default) - pandas' own groupby drops NaN-keyed
+    # groups by default, which would silently drop every "need" row here
+    # (group_type system_aggregate/category_aggregate/country) rather than
+    # summarizing them.
+    return working.groupby(group_cols, as_index=False, dropna=False)["flex_need_twh"].agg(_WEATHER_YEAR_STATS[stat])
 
 
 def _display_scenarios(scenarios: list, clean: bool) -> list:
@@ -467,7 +527,26 @@ def plot_flex_option_category_grid(
     is_flag=True,
     help="Strip the _F<year>/_R<year> run-type suffix from scenario names in axis labels, e.g. 'base_R2050' -> 'base'.",
 )
-def main(output_dir: str, table_csv: str, countries: tuple, dark: bool, fmt: str, clean: bool):
+@click.option(
+    "--weather-year-stat",
+    type=click.Choice(list(_WEATHER_YEAR_STATS)),
+    default="mean",
+    show_default=True,
+    help="How to summarize a weather-year ensemble's per-year bars into one (see docs/adr/0023/0024) - "
+    "auto-detected whenever a source scenario has more than one weather year present, for both need and "
+    "provision plots. A plain single-statistic bar, not a distribution view (see docs/adr/0024's "
+    "Consequences) - a flex option's provision can flip sign year-to-year, so 'mean' can understate how "
+    "much it actually varies.",
+)
+def main(
+    output_dir: str,
+    table_csv: str,
+    countries: tuple,
+    dark: bool,
+    fmt: str,
+    clean: bool,
+    weather_year_stat: str,
+):
     setup_plot(dark=dark)
     output_path = Path(output_dir)
     plots_dir = output_path / "flex_needs_plots"
@@ -483,6 +562,7 @@ def main(output_dir: str, table_csv: str, countries: tuple, dark: bool, fmt: str
     if tidy.empty:
         print(f"{table_path} is empty - nothing to plot.")
         return
+    tidy = _summarize_weather_years(tidy, weather_year_stat)
 
     plots_dir.mkdir(parents=True, exist_ok=True)
 

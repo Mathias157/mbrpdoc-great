@@ -40,6 +40,16 @@ git submodule update --init --recursive
 Uninitialized submodules look like empty directories — don't assume the code
 or data is missing before checking this.
 
+**One run per type, per scenario folder.** A scenario folder may hold at
+most one `_INV`, one `_F<year>`, and one `_R<year>` run — never two runs of
+the same type (e.g. two different weather years' `_F2050` results must
+never share a folder). This isn't just tidiness: postprocessing caches and
+indexes GDX results by folder (see
+[docs/adr/0023](docs/adr/0023-interannual-flexibility-needs-batched-compute.md)),
+which silently breaks if a folder's contents become ambiguous. Watch for
+and flag any workflow (new job scripts, manual HPC setup, weather-year
+sweeps) that would violate this.
+
 **Pixi environment.** All dependencies (including `pybalmorel`) live in the
 pixi env, not system Python. Any ad-hoc Python invocation — not just the
 named `pixi run` tasks below — must go through `pixi run python ...` (or

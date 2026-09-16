@@ -49,12 +49,40 @@ so a sweep over dumb-charging share across scenarios actually reflects each
 scenario's own setting instead of whatever was last hand-edited into the
 shared base file (see docs/adr/0021).
 
-Compute-only - writes flexibility_needs.csv and nothing else. Reading the
-GDX results this needs (particularly PRO_YCRAGFST) is the expensive part of
-this pipeline stage, both in time and RAM, even with the .gdx_cache/*.pkl
-symbol cache (see `_get_result_cached`) - so plotting was split out into
-its own companion script, `plot_flexibility_needs.py`, which only reads
-this CSV and has no GDX/GAMS dependency at all. Run them back to back:
+Also writes interannual_flexibility_needs.csv: a 4th decomposition level,
+one beyond Annual, measuring flexibility need/provision *across* weather
+years sharing one source scenario (`<source>_WY<year>`, see CONTEXT.md's
+"Weather year run") rather than within one year - see docs/adr/0023
+(compute architecture) and docs/adr/0024 (concept). Empty but always
+written, even for a scenario set with no weather years, so downstream
+consumers don't need to special-case its absence. Built from a small
+per-(weather year, group, commodity[, flex option]) `annual_mean` scalar
+accumulator captured during the ordinary per-scenario loop below - not by
+holding every weather year's full hourly series at once, which is exactly
+what the batching this module also does (see next paragraph) exists to
+avoid.
+
+Reads scenario folders in fixed-size batches (`--batch-size`) rather than
+locating and collecting every scenario at once: `_get_result_cached`'s
+predecessor cached one pickle per symbol covering *every* located scenario
+- fine at this dataset's current preliminary weather-year resolution, but
+untenable once the full-resolution weather-year runs land (docs/adr/0023).
+Each symbol is now cached **per scenario folder**
+(`.gdx_cache/<symbol>/<folder>.pkl`, see `_get_batch_results_cached`), not
+per batch - batch composition depends on how many scenario folders exist
+and `--batch-size`, neither of which is stable across runs, but a folder's
+own name is. This relies on a hard rule (see CONTEXT.md's "Scenario name",
+AGENTS.md): a scenario folder holds at most one run of each type (one
+`_INV`, one `_F<year>`, one `_R<year>`) - never two, or a folder's own
+cached data would be ambiguous.
+
+Compute-only - writes flexibility_needs.csv and nothing else besides the
+two files above. Reading the GDX results this needs (particularly
+PRO_YCRAGFST) is the expensive part of this pipeline stage, both in time
+and RAM, even with the per-folder .gdx_cache - so plotting was split out
+into its own companion script, `plot_flexibility_needs.py`, which only
+reads these CSVs and has no GDX/GAMS dependency at all. Run them back to
+back:
 
     python estimate_flexibility_needs.py --output-dir build_postprocess
     python plot_flexibility_needs.py --output-dir build_postprocess
@@ -69,6 +97,7 @@ Created on 14.08.2026
 
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 # Add repo root (for scripts.postprocessing.*) and the Balmorel submodule's
@@ -98,11 +127,13 @@ def _log(msg: str) -> None:
 
 from scripts.postprocessing.aggregate_category_costs import build_reference_category_map
 from scripts.postprocessing.categorize_countries import (
+    RUN_TYPE_RE,
     SOLAR_TECHNOLOGIES,
     WIND_TECHNOLOGIES,
     region_to_country_map,
     scenario_target_year,
     select_scenario_names,
+    split_weather_year,
 )
 from scripts.postprocessing.flex_option_metrics import (
     FLEX_OPTIONS,
@@ -163,7 +194,25 @@ NEEDS_COLUMNS = [
     "flex_need_twh",
 ]
 
+# interannual_flexibility_needs.csv's own row shape - same columns as
+# NEEDS_COLUMNS, but "Scenario" holds the *source* scenario name (the
+# weather-year sweep's shared base, e.g. "base", not any one
+# "base_WY1986_F2050") since an Interannual row is a property of the whole
+# ensemble, not of one weather year - see docs/adr/0023/0024.
+INTERANNUAL_COLUMNS = NEEDS_COLUMNS
+
 _EMPTY_HOURLY = pd.DataFrame(columns=["Country", "Season", "Time", "Value"])
+
+# Fixed Balmorel S52xT168 chronological grid (52 weeks x 168 hours) this
+# whole pipeline already assumes throughout (see _period_means's own
+# hour-in-week parsing) - used as the Interannual level's per-weather-year
+# weight rather than each year's own present-row count, since the
+# accumulator (see `_annual_mean_aligned`) only ever keeps one scalar per
+# weather year, not the full hourly series row count is implicit in. A
+# weather year genuinely short of this (a partial/failed run) should be
+# excluded with a warning rather than silently mis-weighted - not yet
+# implemented, see docs/adr/0023's Consequences.
+HOURS_PER_WEATHER_YEAR = 8736
 
 # Flattened (flex_option, commodity, spec) triples for every commodity view
 # in flex_option_metrics.FLEX_OPTIONS whose own MainResults symbol carries
@@ -286,31 +335,185 @@ def _split_ev_dumb(
     return dumb_hourly, smart_hourly
 
 
-def _get_result_cached(
-    res, symbol: str, cache_dir: Path, overwrite: bool
+def _folder_cache_path(cache_dir: Path, symbol: str, folder: str) -> Path:
+    """`.gdx_cache/<symbol>/<folder>.pkl` - one file per (symbol, scenario
+    folder), not one file per symbol covering every located scenario folder
+    at once (this module's previous, simpler scheme - untenable once
+    full-resolution weather-year runs land, see module docstring). Keyed by
+    folder *name*, not batch index/position: batch composition changes
+    freely between runs (more weather years landing, `--batch-size`
+    retuned), a folder's own name doesn't - see docs/adr/0023."""
+    return cache_dir / symbol / f"{folder}.pkl"
+
+
+def _batch_fully_cached(
+    cache_dir: Path, symbols: list, folders: list, overwrite: bool
+) -> bool:
+    """Whether every (symbol, folder) pair for this batch already has a
+    cached pickle. When true, `main()` skips `model.collect_results()` for
+    the whole batch - not just the GDX read after the fact, but the GAMS
+    database open itself, the actually expensive step (see this module's
+    docstring and `flex_option_hourly_net`'s neighbours for how heavy
+    PRO_YCRAGFST alone already is)."""
+    if overwrite:
+        return False
+    return all(
+        _folder_cache_path(cache_dir, symbol, folder).exists()
+        for symbol in symbols
+        for folder in folders
+    )
+
+
+def _get_batch_results_cached(
+    res,
+    symbol: str,
+    cache_dir: Path,
+    overwrite: bool,
+    folders: list,
+    scfolder_to_scname: dict,
 ) -> pd.DataFrame:
-    """`res.get_result(symbol)`, pickle-cached to `cache_dir/<symbol>.pkl`.
-    PRO_YCRAGFST in particular is a large hourly GDX read reused by every
-    technology/peaker flex option below, so re-running this script (e.g. to
-    tweak a plot) doesn't re-read it from disk every time. Mirrors
-    scripts/Balmorel/analysis/analyse.py's module-level `collect_results`
-    pickle cache, but self-contained (no click context) and living under
-    the (already gitignored) --output-dir."""
-    cache_path = cache_dir / f"{symbol}.pkl"
+    """One batch's worth of `symbol`, assembled from per-folder pickle
+    cache wherever possible. `res` is only touched - one `res.get_result
+    (symbol)` GDX read, covering every scenario name across this batch's
+    folders at once - if at least one folder is missing its cache for this
+    symbol, or `overwrite`. That read's rows are then split back out per
+    folder (via `scfolder_to_scname`, already built by `model.
+    locate_results()` - one folder can hold several scenario names, see
+    CONTEXT.md's "Scenario name") and each folder's own slice written to
+    its own cache file, so a future run with different batch composition
+    still reuses whichever folders haven't changed. `res` may be None here
+    only when every folder in `folders` is already fully cached for every
+    symbol (see `_batch_fully_cached`) - this function's own per-symbol
+    fast path (returning before `res` is ever touched) is what makes that
+    safe."""
+    missing = [
+        folder
+        for folder in folders
+        if overwrite or not _folder_cache_path(cache_dir, symbol, folder).exists()
+    ]
+    if not missing:
+        _log(f"  {symbol}: all {len(folders)} folder(s) in batch already cached")
+        return pd.concat(
+            [
+                pd.read_pickle(_folder_cache_path(cache_dir, symbol, folder))
+                for folder in folders
+            ],
+            ignore_index=True,
+        )
+
     t_start = time.perf_counter()
-    if cache_path.exists() and not overwrite:
-        _log(f"Loading {symbol} from cached .pkl file")
-        df = pd.read_pickle(cache_path)
-        _log(f"  {symbol}: {len(df):,} rows loaded from cache in {time.perf_counter() - t_start:.1f}s")
-        return df
-    _log(f"Loading {symbol} from Balmorel results (GDX read - not cached yet)")
+    _log(f"  {symbol}: reading from Balmorel results ({len(missing)}/{len(folders)} folder(s) not cached)")
     df = res.get_result(symbol)
     _log(f"  {symbol}: {len(df):,} rows read from GDX in {time.perf_counter() - t_start:.1f}s")
-    t_pickle = time.perf_counter()
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    df.to_pickle(cache_path)
-    _log(f"  {symbol}: cached to {cache_path.name} in {time.perf_counter() - t_pickle:.1f}s")
+
+    cache_dir_for_symbol = cache_dir / symbol
+    cache_dir_for_symbol.mkdir(parents=True, exist_ok=True)
+    for folder in folders:
+        names = scfolder_to_scname.get(folder, [])
+        df[df["Scenario"].isin(names)].to_pickle(_folder_cache_path(cache_dir, symbol, folder))
     return df
+
+
+def _annual_mean_aligned(hourly: pd.DataFrame, sign: pd.DataFrame | None = None) -> float:
+    """Mean hourly Value - the same scalar `_period_means` computes
+    internally as `annual_mean` but never returns, captured here for the
+    Interannual accumulator (see docs/adr/0023) without threading a new
+    return value through `flexibility_needs`/`flexibility_provision`.
+    Residual load's own hourly frame already covers the complete (Season,
+    Time) grid, so a bare mean suffices (`sign=None`). A flex option's own
+    `hourly_net` does not - GDX omits genuinely-zero hours rather than
+    storing true zeros (see `flexibility_provision`'s own docstring on why
+    that matters for "Other") - so it's reindexed onto `sign`'s complete
+    domain and zero-filled first, exactly like `flexibility_provision`
+    itself, so the annual mean captured here reflects the same series its
+    Daily/Weekly/Annual provision already does."""
+    if sign is None:
+        return float(hourly["Value"].mean())
+    aligned = (
+        sign[["Season", "Time"]]
+        .merge(hourly, on=["Season", "Time"], how="left")
+        .fillna(0)
+        .infer_objects(copy=False)
+    )
+    return float(aligned["Value"].mean())
+
+
+def _interannual_rows(
+    accumulator: dict, source_scenario_to_year: dict
+) -> pd.DataFrame:
+    """Interannual need/provision rows (see docs/adr/0023/0024) from the
+    scalar accumulator built during the per-scenario loop in `main()`:
+    `(source_scenario, group_type, group, category, commodity, flex_option)
+    -> {weather_year: annual_mean}`. `flex_option == ""` keys are residual
+    load (sign-invariant need, same construction as `flexibility_needs`
+    one level up); `flex_option != ""` keys are one option's own provision,
+    signed by *that same group's* own Interannual sign (never the option's
+    own - the same rule as `flex_sign`/`flexibility_provision`, docs/adr/
+    0017), plus an "Other" catch-all per group computed the same
+    additive-residual way as the per-scenario loop's own Other. A
+    (source_scenario, weather years) pool with fewer than 2 weather years
+    is skipped entirely - there's no interannual variability to measure
+    from one point."""
+    mwh_to_twh = 1e-6
+    rows = []
+    signs = {}  # (source_scenario, group_type, group, category, commodity) -> {weather_year: sign}
+    need_value = {}  # same key -> that group's own Interannual need (TWh)
+    tracked = defaultdict(float)  # same key -> summed tracked-option provision (TWh)
+
+    for key, year_means in accumulator.items():
+        source_scenario, group_type, group, category, commodity, flex_option = key
+        if flex_option != "" or len(year_means) < 2:
+            continue
+        values = np.array(list(year_means.values()))
+        n_year_mean = values.mean()
+        need = 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * mwh_to_twh
+        sign_key = (source_scenario, group_type, group, category, commodity)
+        need_value[sign_key] = need
+        signs[sign_key] = {year: np.sign(value - n_year_mean) for year, value in year_means.items()}
+        rows.append({
+            "Scenario": source_scenario, "Year": source_scenario_to_year.get(source_scenario, ""),
+            "group_type": group_type, "group": group, "category": category,
+            "flex_option": "", "Commodity": commodity, "timescale": "Interannual",
+            "flex_need_twh": need,
+        })
+
+    for key, year_means in accumulator.items():
+        source_scenario, group_type, group, category, commodity, flex_option = key
+        if flex_option == "" or len(year_means) < 2:
+            continue
+        sign_key = (source_scenario, group_type.removeprefix("flex_option_"), group, category, commodity)
+        year_signs = signs.get(sign_key)
+        if not year_signs:
+            continue  # no matching residual-load signal for this group - skip rather than guess
+        values = np.array(list(year_means.values()))
+        n_year_mean = values.mean()
+        provision = 0.5 * HOURS_PER_WEATHER_YEAR * mwh_to_twh * sum(
+            (value - n_year_mean) * year_signs[year]
+            for year, value in year_means.items()
+            if year in year_signs
+        )
+        tracked[sign_key] += provision
+        rows.append({
+            "Scenario": source_scenario, "Year": source_scenario_to_year.get(source_scenario, ""),
+            "group_type": group_type, "group": group, "category": category,
+            "flex_option": flex_option, "Commodity": commodity, "timescale": "Interannual",
+            "flex_need_twh": provision,
+        })
+
+    for sign_key, need in need_value.items():
+        source_scenario, group_type, group, category, commodity = sign_key
+        rows.append({
+            "Scenario": source_scenario, "Year": source_scenario_to_year.get(source_scenario, ""),
+            "group_type": f"flex_option_{group_type}", "group": group, "category": category,
+            "flex_option": "Other", "Commodity": commodity, "timescale": "Interannual",
+            "flex_need_twh": need - tracked.get(sign_key, 0.0),
+        })
+
+    return (
+        pd.DataFrame(rows, columns=INTERANNUAL_COLUMNS)
+        if rows
+        else pd.DataFrame(columns=INTERANNUAL_COLUMNS)
+    )
 
 
 def country_hourly_demand(
@@ -884,7 +1087,6 @@ def build_flex_option_country_table(
     )
 
 
-
 # ------------------------------- #
 #            2. Main              #
 # ------------------------------- #
@@ -907,8 +1109,9 @@ def build_flex_option_country_table(
     "--output-dir",
     type=str,
     default="build_postprocess",
-    help="Where to write flexibility_needs.csv (and cache read GDX symbols under .gdx_cache/). "
-    "Plotting it is a separate step - see plot_flexibility_needs.py.",
+    help="Where to write flexibility_needs.csv/interannual_flexibility_needs.csv (and cache read GDX "
+    "symbols per-folder under .gdx_cache/<symbol>/<folder>.pkl). Plotting is a separate step - see "
+    "plot_flexibility_needs.py.",
 )
 @click.option(
     "--categorization-csv",
@@ -933,16 +1136,29 @@ def build_flex_option_country_table(
     multiple=True,
     default=(),
     help="Restrict to these scenario name(s) (e.g. --scenarios ELN_R2050) for local testing. "
-    "Default ('all', i.e. every fullyear/rolling scenario result found under --balmorel-path) is expensive: "
-    "Balmorel.collect_results() opens a GAMS database per scenario *folder* it locates, not per scenario "
-    "name, regardless of any filtering done afterwards - so this option prunes which folders get located "
-    "in the first place, before collect_results() runs, rather than filtering the resulting DataFrames.",
+    "Default ('all', i.e. every fullyear/rolling scenario result found under --balmorel-path) is read in "
+    "--batch-size-sized batches instead of all at once (see docs/adr/0023) - collect_results() opens a "
+    "GAMS database per scenario *folder*, not per scenario name, regardless of any filtering done "
+    "afterwards, so this option prunes which folders get located in the first place, before "
+    "collect_results() runs, rather than filtering the resulting DataFrames. When given, batching is "
+    "skipped entirely (a single pass over the requested names) - this option's whole purpose is already "
+    "keeping the read small.",
+)
+@click.option(
+    "--batch-size",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Scenario folders read per batch when --scenarios is not given (see docs/adr/0023) - bounds how "
+    "much hourly GDX data is resident in memory at once. Each symbol is cached per scenario folder "
+    "(.gdx_cache/<symbol>/<folder>.pkl), so this can change freely between runs without invalidating "
+    "anything already cached.",
 )
 @click.option(
     "--overwrite-cache",
     is_flag=True,
     default=False,
-    help="Re-read PRO_YCRAGFST/X_FLOW_YCRST/XH2_FLOW_YCRST/etc. from GDX instead of <output-dir>/.gdx_cache/*.pkl "
+    help="Re-read PRO_YCRAGFST/X_FLOW_YCRST/XH2_FLOW_YCRST/etc. from GDX instead of <output-dir>/.gdx_cache/ "
     "(stale after new HPC results are synced down for the same scenario names).",
 )
 def main(
@@ -953,13 +1169,19 @@ def main(
     reference_scenario: str,
     years: tuple,
     scenarios: tuple,
+    batch_size: int,
     overwrite_cache: bool,
 ):
     _log("estimate_flexibility_needs.py starting")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     table_path = output_path / "flexibility_needs.csv"
+    interannual_table_path = output_path / "interannual_flexibility_needs.csv"
     cache_dir = output_path / ".gdx_cache"
+
+    def _write_empty_outputs():
+        pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
+        pd.DataFrame(columns=INTERANNUAL_COLUMNS).to_csv(interannual_table_path, index=False)
 
     categorization_path = (
         Path(categorization_csv)
@@ -970,7 +1192,7 @@ def main(
         print(
             f"{categorization_path} not found - run categorize_countries.py first. Nothing to compute."
         )
-        pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
+        _write_empty_outputs()
         return
 
     categorization = pd.read_csv(categorization_path)
@@ -984,257 +1206,377 @@ def main(
         print(
             f"No MainResults*.gdx files found under {balmorel_path} - nothing to compute yet."
         )
-        pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
+        _write_empty_outputs()
         return
 
     _log(f"Scanning {balmorel_path!r} for scenario folders")
     t_scan = time.perf_counter()
     model = Balmorel(balmorel_path, gams_system_directory=gams_sysdir)
     _log(f"Found {len(model.scenarios)} scenario folder(s) in {time.perf_counter() - t_scan:.1f}s")
+
+    # locate_results() alone is cheap (filenames only, no GDX read - see
+    # AGENTS.md's pybalmorel note) - called once, on every located folder,
+    # to snapshot a *global* folder<->scenario-name mapping before any
+    # batching narrows `model.scenarios`. Each batch's own collect_results()
+    # below re-locates and overwrites these dicts scoped to just that
+    # batch, so the global snapshot has to be taken first and kept
+    # separately (`global_*` below).
+    t_locate = time.perf_counter()
+    model.locate_results(suffix_naming_only=True)
+    _log(f"locate_results() (filenames only) done in {time.perf_counter() - t_locate:.1f}s")
+    global_scenario_names = list(model.scenario_names)
+    global_scname_to_scfolder = dict(model.scname_to_scfolder)
+    global_scfolder_to_scname = dict(model.scfolder_to_scname)
+
     if scenarios:
-        # locate_results() alone is cheap (filenames only, no GDX read -
-        # see AGENTS.md's pybalmorel note) - used here only to resolve
-        # which scenario *folder* each requested scenario name lives in,
-        # so `model.scenarios` can be pruned before collect_results()
-        # re-locates and opens a GAMS database per remaining folder.
-        t_locate = time.perf_counter()
-        model.locate_results(suffix_naming_only=True)
-        _log(f"locate_results() (filenames only) done in {time.perf_counter() - t_locate:.1f}s")
-        missing = set(scenarios) - set(model.scname_to_scfolder)
+        # Folder-level pruning, matching this option's own docstring: every
+        # scenario name living in a folder that contains at least one
+        # requested name stays in play (e.g. a requested _F2050 pulls its
+        # folder's _R2050 along too), not just the literal names requested.
+        missing = set(scenarios) - set(global_scname_to_scfolder)
         if missing:
             print(f"Requested --scenarios not found, ignoring: {sorted(missing)}")
-        wanted_folders = {
-            model.scname_to_scfolder[s] for s in scenarios if s in model.scname_to_scfolder
+        requested_folders = {
+            global_scname_to_scfolder[s] for s in scenarios if s in global_scname_to_scfolder
         }
-        model.scenarios = [SC for SC in model.scenarios if SC in wanted_folders]
-        _log(f"Pruned to {len(model.scenarios)} scenario folder(s) matching --scenarios")
+        global_scenario_names = [
+            s for s in global_scenario_names if global_scname_to_scfolder[s] in requested_folders
+        ]
 
-    _log("collect_results() starting - opens a GAMS database per remaining scenario folder")
-    t_collect = time.perf_counter()
-    model.collect_results(suffix_naming_only=True)
-    _log(f"collect_results() done in {time.perf_counter() - t_collect:.1f}s")
-    res = model.results
-
-    el = _get_result_cached(res, "EL_DEMAND_YCRST", cache_dir, overwrite_cache)
-    h = _get_result_cached(res, "H_DEMAND_YCRAST", cache_dir, overwrite_cache)
-    h2 = _get_result_cached(res, "H2_DEMAND_YCRST", cache_dir, overwrite_cache)
-    pro = _get_result_cached(res, "PRO_YCRAGFST", cache_dir, overwrite_cache)
-    f_cons = _get_result_cached(res, "F_CONS_YCRAST", cache_dir, overwrite_cache)
-    x_flow = _get_result_cached(res, "X_FLOW_YCRST", cache_dir, overwrite_cache)
-    xh2_flow = _get_result_cached(res, "XH2_FLOW_YCRST", cache_dir, overwrite_cache)
-    region_to_country = region_to_country_map(pro)
-    demand_symbols = {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2}
-    balmorel_path_obj = Path(balmorel_path)
-
-    scenario_names = select_scenario_names(model.scenario_names)
+    scenario_names = select_scenario_names(global_scenario_names)
     _log(
         f"Estimating flexibility needs for {len(scenario_names)} fullyear/rolling scenario result(s): {scenario_names}"
     )
 
-    tables = []
-    for scenario_i, scenario_name in enumerate(scenario_names, start=1):
-        t_scenario = time.perf_counter()
-        _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: starting")
-        year = scenario_target_year(el, scenario_name=scenario_name)
-        if year is None:
-            _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: no target year found, skipping")
-            continue
+    # Batch by scenario *folder* (one folder's data - every symbol - is
+    # read and discarded together), not by scenario name. Skipped entirely
+    # (one batch) when --scenarios already narrowed things down - see
+    # --batch-size's own help text.
+    wanted_folders = sorted({global_scname_to_scfolder[name] for name in scenario_names})
+    if scenarios:
+        folder_batches = [wanted_folders] if wanted_folders else []
+    else:
+        folder_batches = [
+            wanted_folders[i : i + batch_size] for i in range(0, len(wanted_folders), batch_size)
+        ]
+    _log(f"{len(wanted_folders)} scenario folder(s) needed, in {len(folder_batches)} batch(es)")
 
-        scfolder = model.scname_to_scfolder[scenario_name]
-        ev_dumb_fraction = _load_ev_dumb_fraction(balmorel_path_obj, scfolder)
-        dumb_hourly, smart_hourly = _split_ev_dumb(el, ev_dumb_fraction, scenario_name, year)
-        dumb_country_hourly = (
-            dumb_hourly.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
-        )
+    symbols = [
+        "EL_DEMAND_YCRST", "H_DEMAND_YCRAST", "H2_DEMAND_YCRST",
+        "PRO_YCRAGFST", "F_CONS_YCRAST", "X_FLOW_YCRST", "XH2_FLOW_YCRST",
+    ]
+    balmorel_path_obj = Path(balmorel_path)
 
-        for commodity in COMMODITIES:
-            t_commodity = time.perf_counter()
-            if commodity == "ELECTRICITY":
-                demand = country_hourly_demand(
-                    el, ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES, scenario_name, year
-                )
-                demand = (
-                    pd.concat([demand, dumb_country_hourly])
-                    .groupby(["Country", "Season", "Time"])["Value"]
-                    .sum()
-                    .reset_index()
-                )
-                supply = country_hourly_supply(pro, scenario_name, year)
-            else:
-                # No non-dispatchable supply on the heat/hydrogen side - see
-                # docs/adr/0009 - so `supply` is left empty and residual
-                # load is just non-dispatchable demand.
-                demand = country_hourly_demand(
-                    demand_symbols[commodity],
-                    NON_ELECTRICITY_DEMAND_CATEGORIES,
-                    scenario_name,
-                    year,
-                )
-                supply = _EMPTY_HOURLY
-            if demand.empty and supply.empty:
+    # Interannual accumulator (see docs/adr/0023): (source_scenario,
+    # group_type, group, category, commodity, flex_option) -> {weather_year
+    # -> annual_mean}, populated below only for scenario names that parse
+    # as a weather-year run. Persists across every batch - it's a handful
+    # of floats per key, nowhere near the size of the hourly frames being
+    # batched to bound memory.
+    accumulator = defaultdict(dict)
+    source_scenario_to_year = {}
+    header_written = False
+
+    for batch_i, batch_folders in enumerate(folder_batches, start=1):
+        t_batch = time.perf_counter()
+        _log(f"[batch {batch_i}/{len(folder_batches)}] {len(batch_folders)} folder(s): starting")
+
+        if _batch_fully_cached(cache_dir, symbols, batch_folders, overwrite_cache):
+            _log(f"[batch {batch_i}/{len(folder_batches)}] every folder already cached - skipping collect_results()")
+            res = None
+        else:
+            model.scenarios = batch_folders
+            _log(f"[batch {batch_i}/{len(folder_batches)}] collect_results() starting - opens a GAMS database per folder")
+            t_collect = time.perf_counter()
+            model.collect_results(suffix_naming_only=True)
+            _log(f"[batch {batch_i}/{len(folder_batches)}] collect_results() done in {time.perf_counter() - t_collect:.1f}s")
+            res = model.results
+
+        el = _get_batch_results_cached(res, "EL_DEMAND_YCRST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        h = _get_batch_results_cached(res, "H_DEMAND_YCRAST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        h2 = _get_batch_results_cached(res, "H2_DEMAND_YCRST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        pro = _get_batch_results_cached(res, "PRO_YCRAGFST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        f_cons = _get_batch_results_cached(res, "F_CONS_YCRAST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        x_flow = _get_batch_results_cached(res, "X_FLOW_YCRST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        xh2_flow = _get_batch_results_cached(res, "XH2_FLOW_YCRST", cache_dir, overwrite_cache, batch_folders, global_scfolder_to_scname)
+        region_to_country = region_to_country_map(pro)
+        demand_symbols = {"ELECTRICITY": el, "HEAT": h, "HYDROGEN": h2}
+
+        batch_scenario_names = [
+            name for name in scenario_names if global_scname_to_scfolder[name] in batch_folders
+        ]
+        batch_tables = []
+
+        for scenario_i, scenario_name in enumerate(batch_scenario_names, start=1):
+            t_scenario = time.perf_counter()
+            _log(f"[batch {batch_i}][{scenario_i}/{len(batch_scenario_names)}] {scenario_name}: starting")
+            year = scenario_target_year(el, scenario_name=scenario_name)
+            if year is None:
+                _log(f"[batch {batch_i}][{scenario_i}/{len(batch_scenario_names)}] {scenario_name}: no target year found, skipping")
                 continue
-            rl = country_residual_load(demand, supply)
 
-            tables.append(build_system_table(rl, commodity, scenario_name, year))
-            tables.append(
-                build_category_table(
-                    rl, category_map, commodity, scenario_name, year
-                )
+            # (source_scenario, weather_year) from the scenario name's own
+            # RUN_TYPE_RE `base` group - None for an ordinary, non-weather-
+            # year scenario (see docs/adr/0023, CONTEXT.md's "WY folder").
+            run_type_match = RUN_TYPE_RE.match(scenario_name)
+            base = run_type_match.group("base") if run_type_match else scenario_name
+            source_scenario, weather_year = split_weather_year(base)
+            if weather_year is not None:
+                source_scenario_to_year[source_scenario] = year
+
+            scfolder = global_scname_to_scfolder[scenario_name]
+            ev_dumb_fraction = _load_ev_dumb_fraction(balmorel_path_obj, scfolder)
+            dumb_hourly, smart_hourly = _split_ev_dumb(el, ev_dumb_fraction, scenario_name, year)
+            dumb_country_hourly = (
+                dumb_hourly.groupby(["Country", "Season", "Time"])["Value"].sum().reset_index()
             )
-            tables.append(
-                build_country_table(rl, category_map, commodity, scenario_name, year)
-            )
 
-            # Per-group FlexSign/need (system/category/country), each from
-            # that group's own residual load - not one system-wide value
-            # broadcast to every group - so every group's tracked flex
-            # options plus its "Other" bucket sum back to that group's own
-            # Total Flexibility Needs (see docs/adr/0017). system/category
-            # are the aggregate (copper-plate) bound; country is the
-            # disaggregated one - see docs/adr/0020.
-            system_hourly_rl = rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
-            system_sign = flex_sign(system_hourly_rl)
-            system_need = flexibility_needs(system_hourly_rl)
-
-            categorized_rl = rl.assign(
-                combined_category=rl["Country"].map(category_map)
-            ).dropna(subset=["combined_category"])
-            category_signs = {}
-            category_needs = {}
-            for group, group_rl in categorized_rl.groupby("combined_category"):
-                group_hourly_rl = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
-                category_signs[group] = flex_sign(group_hourly_rl)
-                category_needs[group] = flexibility_needs(group_hourly_rl)
-
-            country_signs = {}
-            country_needs = {}
-            for country, group_rl in rl.groupby("Country"):
-                group_hourly_rl = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
-                country_signs[country] = flex_sign(group_hourly_rl)
-                country_needs[country] = flexibility_needs(group_hourly_rl)
-
-            system_tracked = {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0}
-            category_tracked = {
-                group: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for group in category_needs
-            }
-            country_tracked = {
-                country: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for country in country_needs
-            }
-
-            for flex_option, spec in (
-                (fo, s) for fo, com, s in HOURLY_FLEX_OPTIONS if com == commodity
-            ):
-                t_option = time.perf_counter()
-                hourly_net = flex_option_hourly_net(
-                    spec,
-                    commodity,
-                    pro,
-                    f_cons,
-                    demand_symbols,
-                    x_flow,
-                    xh2_flow,
-                    region_to_country,
-                    scenario_name,
-                    year,
-                    ev_smart_hourly=smart_hourly if spec.get("category") == "ENDO_EV" else None,
-                )
-                if hourly_net.empty:
+            for commodity in COMMODITIES:
+                t_commodity = time.perf_counter()
+                if commodity == "ELECTRICITY":
+                    demand = country_hourly_demand(
+                        el, ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES, scenario_name, year
+                    )
+                    demand = (
+                        pd.concat([demand, dumb_country_hourly])
+                        .groupby(["Country", "Season", "Time"])["Value"]
+                        .sum()
+                        .reset_index()
+                    )
+                    supply = country_hourly_supply(pro, scenario_name, year)
+                else:
+                    # No non-dispatchable supply on the heat/hydrogen side -
+                    # see docs/adr/0009 - so `supply` is left empty and
+                    # residual load is just non-dispatchable demand.
+                    demand = country_hourly_demand(
+                        demand_symbols[commodity],
+                        NON_ELECTRICITY_DEMAND_CATEGORIES,
+                        scenario_name,
+                        year,
+                    )
+                    supply = _EMPTY_HOURLY
+                if demand.empty and supply.empty:
                     continue
+                rl = country_residual_load(demand, supply)
 
-                system_table = build_flex_option_system_table(
-                    hourly_net, system_sign, flex_option, commodity, scenario_name, year
+                batch_tables.append(build_system_table(rl, commodity, scenario_name, year))
+                batch_tables.append(
+                    build_category_table(rl, category_map, commodity, scenario_name, year)
                 )
-                tables.append(system_table)
-                for ts, value in zip(system_table["timescale"], system_table["flex_need_twh"]):
-                    system_tracked[ts] += value
-
-                category_table = build_flex_option_category_table(
-                    hourly_net,
-                    category_map,
-                    category_signs,
-                    flex_option,
-                    commodity,
-                    scenario_name,
-                    year,
-                )
-                tables.append(category_table)
-                for group, ts, value in zip(
-                    category_table["group"], category_table["timescale"], category_table["flex_need_twh"]
-                ):
-                    category_tracked[group][ts] += value
-
-                country_table = build_flex_option_country_table(
-                    hourly_net,
-                    category_map,
-                    country_signs,
-                    flex_option,
-                    commodity,
-                    scenario_name,
-                    year,
-                )
-                tables.append(country_table)
-                for country, ts, value in zip(
-                    country_table["group"], country_table["timescale"], country_table["flex_need_twh"]
-                ):
-                    country_tracked[country][ts] += value
-
-                _log(
-                    f"    [{scenario_name}/{commodity}] flex_option={flex_option!r}: "
-                    f"done in {time.perf_counter() - t_option:.2f}s "
-                    f"({hourly_net['Country'].nunique()} country-hour row(s): {len(hourly_net):,})"
+                batch_tables.append(
+                    build_country_table(rl, category_map, commodity, scenario_name, year)
                 )
 
-            # "Other": whatever's left unattributed after every tracked flex
-            # option, computed the same way as any other technology (as a
-            # residual of the already-additive FlexNeed/FlexProv numbers,
-            # exploiting linearity) rather than silently omitted - a safety
-            # net for exact additivity regardless of whether FLEX_OPTIONS is
-            # a perfectly exhaustive partition (see docs/adr/0017). Computed
-            # at all three levels - country-level "Other" is what a future
-            # investigation into its actual composition would start from
-            # (deferred, see docs/adr/0020's Consequences).
-            other_system = {ts: system_need[ts] - system_tracked[ts] for ts in system_need}
-            tables.append(
-                _needs_rows_from_dict(
-                    other_system, scenario_name, year, "flex_option_system_aggregate", "All", commodity, "Other"
-                )
-            )
-            for group, needs in category_needs.items():
-                other_category = {
-                    ts: needs[ts] - category_tracked[group][ts] for ts in needs
+                # Per-group FlexSign/need (system/category/country), each
+                # from that group's own residual load - not one system-wide
+                # value broadcast to every group - so every group's tracked
+                # flex options plus its "Other" bucket sum back to that
+                # group's own Total Flexibility Needs (see docs/adr/0017).
+                # system/category are the aggregate (copper-plate) bound;
+                # country is the disaggregated one - see docs/adr/0020.
+                system_hourly_rl = rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                system_sign = flex_sign(system_hourly_rl)
+                system_need = flexibility_needs(system_hourly_rl)
+                if weather_year is not None:
+                    accumulator[(source_scenario, "system_aggregate", "All", "", commodity, "")][weather_year] = (
+                        _annual_mean_aligned(system_hourly_rl)
+                    )
+
+                categorized_rl = rl.assign(
+                    combined_category=rl["Country"].map(category_map)
+                ).dropna(subset=["combined_category"])
+                category_signs = {}
+                category_needs = {}
+                for group, group_rl in categorized_rl.groupby("combined_category"):
+                    group_hourly_rl = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                    category_signs[group] = flex_sign(group_hourly_rl)
+                    category_needs[group] = flexibility_needs(group_hourly_rl)
+                    if weather_year is not None:
+                        accumulator[(source_scenario, "category_aggregate", group, "", commodity, "")][weather_year] = (
+                            _annual_mean_aligned(group_hourly_rl)
+                        )
+
+                country_signs = {}
+                country_needs = {}
+                for country, group_rl in rl.groupby("Country"):
+                    group_hourly_rl = group_rl.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                    country_signs[country] = flex_sign(group_hourly_rl)
+                    country_needs[country] = flexibility_needs(group_hourly_rl)
+                    if weather_year is not None:
+                        accumulator[(source_scenario, "country", country, category_map.get(country, ""), commodity, "")][weather_year] = (
+                            _annual_mean_aligned(group_hourly_rl)
+                        )
+
+                system_tracked = {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0}
+                category_tracked = {
+                    group: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for group in category_needs
                 }
-                tables.append(
+                country_tracked = {
+                    country: {"Daily": 0.0, "Weekly": 0.0, "Annual": 0.0} for country in country_needs
+                }
+
+                for flex_option, spec in (
+                    (fo, s) for fo, com, s in HOURLY_FLEX_OPTIONS if com == commodity
+                ):
+                    t_option = time.perf_counter()
+                    hourly_net = flex_option_hourly_net(
+                        spec,
+                        commodity,
+                        pro,
+                        f_cons,
+                        demand_symbols,
+                        x_flow,
+                        xh2_flow,
+                        region_to_country,
+                        scenario_name,
+                        year,
+                        ev_smart_hourly=smart_hourly if spec.get("category") == "ENDO_EV" else None,
+                    )
+                    if hourly_net.empty:
+                        continue
+
+                    system_table = build_flex_option_system_table(
+                        hourly_net, system_sign, flex_option, commodity, scenario_name, year
+                    )
+                    batch_tables.append(system_table)
+                    for ts, value in zip(system_table["timescale"], system_table["flex_need_twh"]):
+                        system_tracked[ts] += value
+
+                    category_table = build_flex_option_category_table(
+                        hourly_net,
+                        category_map,
+                        category_signs,
+                        flex_option,
+                        commodity,
+                        scenario_name,
+                        year,
+                    )
+                    batch_tables.append(category_table)
+                    for group, ts, value in zip(
+                        category_table["group"], category_table["timescale"], category_table["flex_need_twh"]
+                    ):
+                        category_tracked[group][ts] += value
+
+                    country_table = build_flex_option_country_table(
+                        hourly_net,
+                        category_map,
+                        country_signs,
+                        flex_option,
+                        commodity,
+                        scenario_name,
+                        year,
+                    )
+                    batch_tables.append(country_table)
+                    for country, ts, value in zip(
+                        country_table["group"], country_table["timescale"], country_table["flex_need_twh"]
+                    ):
+                        country_tracked[country][ts] += value
+
+                    if weather_year is not None:
+                        # Re-aggregated here at all three levels - the same
+                        # groupby shape build_flex_option_*_table already do
+                        # internally, cheap since hourly_net is small - to
+                        # capture this option's own annual mean without
+                        # threading a new return value through those three
+                        # functions just for this scalar (see docs/adr/0023).
+                        system_hourly_net = hourly_net.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                        accumulator[(source_scenario, "flex_option_system_aggregate", "All", "", commodity, flex_option)][weather_year] = (
+                            _annual_mean_aligned(system_hourly_net, system_sign)
+                        )
+
+                        categorized_net = hourly_net.assign(
+                            combined_category=hourly_net["Country"].map(category_map)
+                        ).dropna(subset=["combined_category"])
+                        for group, group_use in categorized_net.groupby("combined_category"):
+                            if group not in category_signs:
+                                continue
+                            group_hourly_net = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                            accumulator[(source_scenario, "flex_option_category_aggregate", group, "", commodity, flex_option)][weather_year] = (
+                                _annual_mean_aligned(group_hourly_net, category_signs[group])
+                            )
+
+                        for country, group_use in hourly_net.groupby("Country"):
+                            if country not in country_signs:
+                                continue
+                            group_hourly_net = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
+                            accumulator[(source_scenario, "flex_option_country", country, category_map.get(country, ""), commodity, flex_option)][weather_year] = (
+                                _annual_mean_aligned(group_hourly_net, country_signs[country])
+                            )
+
+                    _log(
+                        f"    [{scenario_name}/{commodity}] flex_option={flex_option!r}: "
+                        f"done in {time.perf_counter() - t_option:.2f}s "
+                        f"({hourly_net['Country'].nunique()} country-hour row(s): {len(hourly_net):,})"
+                    )
+
+                # "Other": whatever's left unattributed after every tracked
+                # flex option, computed the same way as any other technology
+                # (as a residual of the already-additive FlexNeed/FlexProv
+                # numbers, exploiting linearity) rather than silently
+                # omitted - a safety net for exact additivity regardless of
+                # whether FLEX_OPTIONS is a perfectly exhaustive partition
+                # (see docs/adr/0017). Computed at all three levels -
+                # country-level "Other" is what a future investigation into
+                # its actual composition would start from (deferred, see
+                # docs/adr/0020's Consequences). The Interannual level's own
+                # "Other" is computed the same additive-residual way, inside
+                # `_interannual_rows` after the batch loop, from the
+                # accumulator - not here.
+                other_system = {ts: system_need[ts] - system_tracked[ts] for ts in system_need}
+                batch_tables.append(
                     _needs_rows_from_dict(
-                        other_category, scenario_name, year, "flex_option_category_aggregate", group, commodity, "Other"
+                        other_system, scenario_name, year, "flex_option_system_aggregate", "All", commodity, "Other"
                     )
                 )
-            for country, needs in country_needs.items():
-                other_country = {
-                    ts: needs[ts] - country_tracked[country][ts] for ts in needs
-                }
-                tables.append(
-                    _needs_rows_from_dict(
-                        other_country, scenario_name, year, "flex_option_country", country, commodity, "Other"
-                    ).assign(category=category_map.get(country, ""))
+                for group, needs in category_needs.items():
+                    other_category = {
+                        ts: needs[ts] - category_tracked[group][ts] for ts in needs
+                    }
+                    batch_tables.append(
+                        _needs_rows_from_dict(
+                            other_category, scenario_name, year, "flex_option_category_aggregate", group, commodity, "Other"
+                        )
+                    )
+                for country, needs in country_needs.items():
+                    other_country = {
+                        ts: needs[ts] - country_tracked[country][ts] for ts in needs
+                    }
+                    batch_tables.append(
+                        _needs_rows_from_dict(
+                            other_country, scenario_name, year, "flex_option_country", country, commodity, "Other"
+                        ).assign(category=category_map.get(country, ""))
+                    )
+
+                _log(
+                    f"  [{scenario_name}] commodity={commodity}: "
+                    f"done in {time.perf_counter() - t_commodity:.1f}s"
                 )
 
-            _log(
-                f"  [{scenario_name}] commodity={commodity}: "
-                f"done in {time.perf_counter() - t_commodity:.1f}s"
-            )
+            _log(f"[batch {batch_i}][{scenario_i}/{len(batch_scenario_names)}] {scenario_name}: done in {time.perf_counter() - t_scenario:.1f}s")
 
-        _log(f"[{scenario_i}/{len(scenario_names)}] {scenario_name}: done in {time.perf_counter() - t_scenario:.1f}s")
+        batch_tidy = (
+            pd.concat(batch_tables, ignore_index=True)
+            if batch_tables
+            else pd.DataFrame(columns=NEEDS_COLUMNS)
+        )
+        if years:
+            batch_tidy = batch_tidy[batch_tidy["Year"].astype(str).isin([str(y) for y in years])]
+        batch_tidy.to_csv(table_path, mode="a" if header_written else "w", header=not header_written, index=False)
+        header_written = True
+        _log(f"[batch {batch_i}/{len(folder_batches)}] wrote {len(batch_tidy)} row(s), done in {time.perf_counter() - t_batch:.1f}s")
 
-    _log(f"All scenarios processed - writing {table_path}")
-    tidy = (
-        pd.concat(tables, ignore_index=True)
-        if tables
-        else pd.DataFrame(columns=NEEDS_COLUMNS)
-    )
+        del el, h, h2, pro, f_cons, x_flow, xh2_flow, res
+
+    if not header_written:
+        pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
+
+    _log("Pooling Interannual need/provision across weather years")
+    interannual = _interannual_rows(accumulator, source_scenario_to_year)
     if years:
-        tidy = tidy[tidy["Year"].astype(str).isin([str(y) for y in years])]
-    tidy.to_csv(table_path, index=False)
-    _log(f"Wrote {len(tidy)} row(s) to {table_path}. Plot with plot_flexibility_needs.py.")
+        interannual = interannual[interannual["Year"].astype(str).isin([str(y) for y in years])]
+    interannual.to_csv(interannual_table_path, index=False)
+    _log(f"Wrote {len(interannual)} row(s) to {interannual_table_path}.")
+    _log("Done. Plot with plot_flexibility_needs.py.")
 
 
 if __name__ == "__main__":

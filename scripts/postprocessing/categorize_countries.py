@@ -44,6 +44,27 @@ SOLAR_TECHNOLOGIES = ["SOLAR-PV"]
 # investment) result, e.g. "EVN_R2050" -> base="EVN", run_type="R", year="2050".
 RUN_TYPE_RE = re.compile(r"^(?P<base>.+)_(?P<run_type>F|R)(?P<year>\d{4})$")
 
+# Weather-year suffix on RUN_TYPE_RE's own `base` group, e.g.
+# "base_WY1986" -> source="base", weather_year="1986" - see CONTEXT.md's
+# "WY folder"/"Weather year run" and docs/adr/0014. A full weather-year
+# scenario name nests both suffixes: "base_WY1986_F2050" has RUN_TYPE_RE
+# split off "_F2050" first (leaving "base_WY1986" as `base`), which this
+# regex then splits further. Kept separate from RUN_TYPE_RE rather than one
+# combined pattern - target year and weather year are independent axes (see
+# CONTEXT.md's "Target year" vs "Weather year"), and most scenario names
+# have no weather-year suffix at all.
+WEATHER_YEAR_RE = re.compile(r"^(?P<source>.+)_WY(?P<weather_year>\d{4})$")
+
+
+def split_weather_year(base: str) -> tuple[str, str | None]:
+    """(source_scenario, weather_year) from RUN_TYPE_RE's own `base` group.
+    `weather_year` is None (and `source_scenario` is `base` unchanged) for
+    an ordinary, non-weather-year scenario - see docs/adr/0023."""
+    match = WEATHER_YEAR_RE.match(base)
+    if not match:
+        return base, None
+    return match.group("source"), match.group("weather_year")
+
 # Fixed vocabulary so every map uses the same colour for the same category,
 # regardless of which categories actually occur in a given scenario.
 COMBINED_CATEGORIES = [

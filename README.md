@@ -21,6 +21,12 @@ pixi run snakemake --cores 4  # runs the pipeline, builds build/main.pdf
 (`base/data`). If you cloned without `--recurse-submodules`, run
 `git submodule update --init --recursive` before `pixi run snakemake`.
 
+**Scenario folder rule**: a Balmorel scenario folder under `scripts/Balmorel/`
+may hold at most one `_INV`, one `_F<year>`, and one `_R<year>` run — never
+two runs of the same type in one folder (e.g. two weather years' `_F2050`
+results). Postprocessing caches results by folder, so this must hold. See
+`AGENTS.md` and `CONTEXT.md`'s **Scenario name** entry.
+
 ## Repo Layout
 
 ```
