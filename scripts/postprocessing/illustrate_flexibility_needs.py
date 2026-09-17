@@ -205,7 +205,22 @@ def _contribution_for_timescale(working: pd.DataFrame, sign: pd.DataFrame, times
     return out[["x", "contribution"]]
 
 
-def _plot_deviation(ax, series: pd.DataFrame, title: str) -> None:
+def _resolution_unit(timescale: str) -> str:
+    """"MW" only for a genuinely hourly-resolution series ("Daily" - x is
+    `hour_index`, one point per hour, see `_series_for_timescale`), "MWh"
+    for anything coarser (a mean over >=1 hour is itself still a power-like
+    figure numerically, but every other panel here plots one point per day/
+    week/weather-year - a period, not an instant - so it reads as an energy
+    quantity for that period, not an instantaneous power). "Weekly" (one
+    point per day) and "Annual" (one point per week) are both "MWh" by this
+    rule; so is every Interannual panel (one point per weather year, never
+    hourly) - see `illustrate_interannual_flexibility_needs.py`, which
+    always passes "MWh" explicitly rather than calling this helper (it has
+    no "timescale" concept of its own)."""
+    return "MW" if timescale == "Daily" else "MWh"
+
+
+def _plot_deviation(ax, series: pd.DataFrame, title: str, unit: str = "MWh") -> None:
     x = series["x"].to_numpy(dtype=float)
     finer = series["finer"].to_numpy(dtype=float)
     coarser = series["coarser"].to_numpy(dtype=float)
@@ -214,17 +229,17 @@ def _plot_deviation(ax, series: pd.DataFrame, title: str) -> None:
     ax.fill_between(x, finer, coarser, where=finer >= coarser, color=ABOVE_COLOUR, alpha=0.55, interpolate=True, label="Above mean")
     ax.fill_between(x, finer, coarser, where=finer < coarser, color=BELOW_COLOUR, alpha=0.55, interpolate=True, label="Below mean")
     ax.set_title(title, fontsize=9)
-    ax.set_ylabel("Value [MW]", fontsize=8)
+    ax.set_ylabel(f"Value [{unit}]", fontsize=8)
 
 
-def _plot_contribution(ax, series: pd.DataFrame, title: str) -> None:
+def _plot_contribution(ax, series: pd.DataFrame, title: str, unit: str = "MWh") -> None:
     x = series["x"].to_numpy(dtype=float)
     y = series["contribution"].to_numpy(dtype=float)
     colours = np.where(y >= 0, BELOW_COLOUR, "#e07a5f")
     ax.bar(x, y, color=colours, width=1.0)
     ax.axhline(0, color="black", linewidth=0.7)
     ax.set_title(title, fontsize=9)
-    ax.set_ylabel("Contribution [MWh]", fontsize=8)
+    ax.set_ylabel(f"Contribution [{unit}]", fontsize=8)
 
 
 def plot_residual_illustration(
@@ -240,14 +255,15 @@ def plot_residual_illustration(
     fig, axes = plt.subplots(len(rows), 2, figsize=(13, 3.2 * len(rows)), squeeze=False)
     for i, timescale in enumerate(rows):
         need = needs[timescale]
+        unit = _resolution_unit(timescale)
         full_series = _series_for_timescale(working, timescale)
-        _plot_deviation(axes[i][0], full_series, f"{timescale} - full year (need: {need:.2f} TWh/a)")
+        _plot_deviation(axes[i][0], full_series, f"{timescale} - full year (need: {need:.2f} TWh/a)", unit=unit)
         if timescale == "Annual":
             axes[i][1].axis("off")
             axes[i][1].text(0.5, 0.5, "Annual timescale already spans the full year", ha="center", va="center", fontsize=8, wrap=True)
         else:
             zoom_series = _series_for_timescale(zoomed, timescale)
-            _plot_deviation(axes[i][1], zoom_series, f"{timescale} - zoomed ({window[2]})")
+            _plot_deviation(axes[i][1], zoom_series, f"{timescale} - zoomed ({window[2]})", unit=unit)
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=8)
     fig.suptitle(title)
@@ -279,18 +295,19 @@ def plot_flex_option_illustration(
     fig, axes = plt.subplots(len(rows), 4, figsize=(17, 3.2 * len(rows)), squeeze=False)
     for i, timescale in enumerate(rows):
         contribution = provision[timescale]
+        unit = _resolution_unit(timescale)
         full_profile = _series_for_timescale(working, timescale)
         full_contribution = _contribution_for_timescale(working, sign, timescale)
-        _plot_deviation(axes[i][0], full_profile, f"{timescale} profile - full year")
-        _plot_contribution(axes[i][1], full_contribution, f"{timescale} contribution (provision: {contribution:.2f} TWh/a)")
+        _plot_deviation(axes[i][0], full_profile, f"{timescale} profile - full year", unit=unit)
+        _plot_contribution(axes[i][1], full_contribution, f"{timescale} contribution (provision: {contribution:.2f} TWh/a)", unit=unit)
         if timescale == "Annual":
             axes[i][2].axis("off")
             axes[i][3].axis("off")
         else:
             zoom_profile = _series_for_timescale(zoomed, timescale)
             zoom_contribution = _contribution_for_timescale(zoomed, sign, timescale)
-            _plot_deviation(axes[i][2], zoom_profile, f"{timescale} profile - zoomed ({window[2]})")
-            _plot_contribution(axes[i][3], zoom_contribution, f"{timescale} contribution - zoomed ({window[2]})")
+            _plot_deviation(axes[i][2], zoom_profile, f"{timescale} profile - zoomed ({window[2]})", unit=unit)
+            _plot_contribution(axes[i][3], zoom_contribution, f"{timescale} contribution - zoomed ({window[2]})", unit=unit)
         if colour:
             for ax in (axes[i][0], axes[i][2]):
                 lines = ax.get_lines()

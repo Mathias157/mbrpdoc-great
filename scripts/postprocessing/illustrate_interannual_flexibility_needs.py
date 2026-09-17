@@ -280,7 +280,9 @@ def plot_interannual_illustration(series: pd.DataFrame, need: float, n_years: in
     zoom into, the same reason illustrate_flexibility_needs.py's own Annual
     row already disables its zoom pane)."""
     fig, ax = plt.subplots(1, 1, figsize=(9, 4.5))
-    _plot_deviation(ax, series, f"Interannual - {n_years} weather years (need: {need:.2f} TWh/a)")
+    # unit="MWh": Interannual is one point per weather year, never hourly -
+    # see illustrate_flexibility_needs._resolution_unit's own docstring.
+    _plot_deviation(ax, series, f"Interannual - {n_years} weather years (need: {need:.2f} TWh/a)", unit="MWh")
     ax.set_xlabel("Weather year")
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=8)
@@ -303,8 +305,8 @@ def plot_interannual_flex_option_illustration(
     (left) next to FlexSign-weighted contribution (right), no zoom pane -
     same reasoning as `plot_interannual_illustration`."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-    _plot_deviation(axes[0], profile_series, "Interannual profile")
-    _plot_contribution(axes[1], contribution_series, f"Interannual contribution (provision: {provision:.2f} TWh/a)")
+    _plot_deviation(axes[0], profile_series, "Interannual profile", unit="MWh")
+    _plot_contribution(axes[1], contribution_series, f"Interannual contribution (provision: {provision:.2f} TWh/a)", unit="MWh")
     if colour:
         lines = axes[0].get_lines()
         if lines:
