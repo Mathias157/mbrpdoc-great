@@ -209,50 +209,69 @@ def _annual_series(annual_means: dict) -> pd.DataFrame:
 
 
 def _contribution_series(annual_means: dict, residual_annual_means: dict) -> pd.DataFrame:
-    """(x, contribution) - `_plot_contribution`'s expected shape: one flex
-    option's own per-weather-year contribution, `0.5 * deviation * sign`,
-    the exact per-year integrand the Interannual provision formula sums
-    (see docs/adr/0024) - `sign` from the *group's own* residual load
-    (`residual_annual_means`), never the option's own, matching `flex_sign`/
-    `flexibility_provision`'s "group's own sign" rule one level up. Only
-    weather years present in both dicts contribute (mirrors
-    `_pool_interannual`'s own `if year in year_signs` guard)."""
+    """(x, contribution) - `_plot_contribution`'s expected shape (MWh, per
+    its own shared y-axis label - not TWh, matching the original hourly
+    script's own per-period contribution units): one flex option's own
+    per-weather-year contribution, `0.5 * HOURS_PER_WEATHER_YEAR *
+    deviation * sign / n_years`, the exact per-year integrand
+    `_interannual_provision` sums (see docs/adr/0024) - `sign` from the
+    *group's own* residual load (`residual_annual_means`), never the
+    option's own, matching `flex_sign`/`flexibility_provision`'s "group's
+    own sign" rule one level up. `n_years` is *residual load's own* weather-
+    year count (not this option's own, possibly smaller if some years had
+    zero dispatch) - same reason as `_pool_interannual`'s own
+    `n_years_by_key`: every bar here must divide by the same N so
+    `sum(bars) * 1e-6` reproduces `_interannual_provision`'s own TWh/a
+    figure exactly, not just the un-normalized total. Only weather years
+    present in both dicts contribute (mirrors `_pool_interannual`'s own
+    `if year in year_signs` guard)."""
     residual_values = np.array(list(residual_annual_means.values()), dtype=float)
     residual_mean = residual_values.mean()
+    n_years = len(residual_annual_means)
     signs = {year: np.sign(value - residual_mean) for year, value in residual_annual_means.items()}
 
     option_values = np.array(list(annual_means.values()), dtype=float)
     option_mean = option_values.mean()
 
     years = sorted((y for y in annual_means if y in signs), key=int)
-    contributions = [0.5 * (annual_means[year] - option_mean) * signs[year] for year in years]
+    contributions = [
+        0.5 * HOURS_PER_WEATHER_YEAR * (annual_means[year] - option_mean) * signs[year] / n_years
+        for year in years
+    ]
     return pd.DataFrame({"x": [int(year) for year in years], "contribution": contributions})
 
 
 def _interannual_need(annual_means: dict) -> float:
     """TWh/a - half the summed absolute deviation between each weather
     year's own annual mean and the N-year mean, weighted by
-    HOURS_PER_WEATHER_YEAR (see docs/adr/0023) - the exact formula
-    `_pool_interannual` computes from the pooled per-year data, recomputed here
-    directly from the per-year series being plotted so the two can never
-    silently drift apart."""
+    HOURS_PER_WEATHER_YEAR and divided by the weather-year count (see
+    docs/adr/0023/0026 - Interannual's population spans the whole N-year
+    ensemble, unlike Daily/Weekly/Annual's own exactly-one-year population,
+    so an un-normalized sum here is a *total over N years*, not a per-year
+    rate; confirmed to matter in practice - this returned numbers on the
+    order of total annual demand before the `/ len(annual_means)` was
+    added) - the exact formula `_pool_interannual` computes from the pooled
+    per-year data, recomputed here directly from the per-year series being
+    plotted so the two can never silently drift apart."""
     values = np.array(list(annual_means.values()), dtype=float)
     n_year_mean = values.mean()
-    return 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * 1e-6
+    return 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * 1e-6 / len(annual_means)
 
 
 def _interannual_provision(annual_means: dict, residual_annual_means: dict) -> float:
     """TWh/a - the Interannual-level equivalent of `flexibility_provision`,
     see `_contribution_series`'s own docstring for the per-year integrand
-    this sums (see docs/adr/0024)."""
+    this sums (see docs/adr/0024) and for why the division is by
+    *residual load's own* weather-year count, not this option's own."""
     residual_values = np.array(list(residual_annual_means.values()), dtype=float)
     residual_mean = residual_values.mean()
+    n_years = len(residual_annual_means)
     signs = {year: np.sign(value - residual_mean) for year, value in residual_annual_means.items()}
     option_values = np.array(list(annual_means.values()), dtype=float)
     option_mean = option_values.mean()
     return 0.5 * HOURS_PER_WEATHER_YEAR * 1e-6 * sum(
         (value - option_mean) * signs[year] for year, value in annual_means.items() if year in signs
-    )
+    ) / n_years
 
 
 def plot_interannual_illustration(series: pd.DataFrame, need: float, n_years: int, title: str, output_path: Path) -> None:

@@ -258,7 +258,24 @@ def _pool_interannual(annual_means: pd.DataFrame) -> pd.DataFrame:
     scenario's own raw name once concatenated into `tidy` (confirmed this
     collision is a real risk even without the suffix: "base_R2050", the
     reference scenario, and "base"'s own weather-year ensemble both reduce
-    to plain "base" - see `_is_weather_year`)."""
+    to plain "base" - see `_is_weather_year`).
+
+    Divides by the pool's own weather-year count (`n_years`) - unlike
+    Daily/Weekly/Annual, whose population is exactly one year's worth of
+    hours (so summing over it already yields a per-year TWh/a figure with
+    no extra division needed), Interannual's population spans the *whole*
+    N-year ensemble (each year's deviation held constant for all 8736 of
+    its own hours, same pattern as the Annual level's own weekly deviation
+    - see `HOURS_PER_WEATHER_YEAR`'s use below). Summing over that without
+    dividing by N gives a *total over N years*, not an annualized rate -
+    confirmed to matter in practice: this was returning numbers on the
+    order of total annual demand before the `/ n_years` was added. Every
+    row in one group (`need`, every tracked option's own `provision`, and
+    `Other`) divides by the *same* `n_years` - the residual load's own
+    pool size for that group, looked up via `sign_key` rather than each
+    option's own (possibly smaller, if some years had zero dispatch)
+    count - so the group's additivity (tracked options + Other == need)
+    still holds exactly after normalizing, not just before it."""
     mwh_to_twh = 1e-6
     key_cols = ["source_scenario", "run_type", "group_type", "group", "category", "Commodity"]
     residual = annual_means[annual_means["flex_option"] == ""]
@@ -267,16 +284,19 @@ def _pool_interannual(annual_means: pd.DataFrame) -> pd.DataFrame:
     rows = []  # each dict carries _source_scenario/_run_type too, resolved into "Scenario" at the end
     signs = {}  # tuple(key_cols) -> {weather_year: sign}
     need_value = {}  # same key -> (need TWh, Year)
+    n_years_by_key = {}  # same key -> residual load's own weather-year count for this group
     tracked = defaultdict(float)  # same key -> summed tracked-option provision (TWh)
 
     for key, grp in residual.groupby(key_cols, dropna=False):
-        if grp["weather_year"].nunique() < 2:
+        n_years = grp["weather_year"].nunique()
+        if n_years < 2:
             continue
         source_scenario, run_type, group_type, group, category, commodity = key
         values = grp["annual_mean_mwh"].to_numpy(dtype=float)
         n_year_mean = values.mean()
-        need = 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * mwh_to_twh
+        need = 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * mwh_to_twh / n_years
         need_value[key] = (need, grp["Year"].iloc[0])
+        n_years_by_key[key] = n_years
         signs[key] = dict(zip(grp["weather_year"], np.sign(values - n_year_mean), strict=True))
         rows.append({
             "_source_scenario": source_scenario, "_run_type": run_type, "Year": grp["Year"].iloc[0],
@@ -293,13 +313,14 @@ def _pool_interannual(annual_means: pd.DataFrame) -> pd.DataFrame:
         year_signs = signs.get(sign_key)
         if not year_signs:
             continue  # no matching residual-load signal for this group - skip rather than guess
+        n_years = n_years_by_key[sign_key]
         values = grp["annual_mean_mwh"].to_numpy(dtype=float)
         n_year_mean = values.mean()
         provision = 0.5 * HOURS_PER_WEATHER_YEAR * mwh_to_twh * sum(
             (value - n_year_mean) * year_signs[year]
             for year, value in zip(grp["weather_year"], values, strict=True)
             if year in year_signs
-        )
+        ) / n_years
         tracked[sign_key] += provision
         rows.append({
             "_source_scenario": source_scenario, "_run_type": run_type, "Year": grp["Year"].iloc[0],
