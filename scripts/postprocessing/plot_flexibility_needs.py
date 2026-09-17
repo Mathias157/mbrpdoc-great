@@ -39,9 +39,20 @@ source scenario rather than one per raw Scenario - unreadable otherwise at
 30+ weather years. `--weather-year-stat` (default `mean`) picks
 mean/min/median/max of `flex_need_twh` across the ensemble; this is a
 plain single-statistic bar, not a distribution view - see
-docs/adr/0023/0024. `interannual_flexibility_needs.csv` (also written by
-estimate_flexibility_needs.py) is the complementary number - how much a
-weather-year ensemble actually varies - not plotted by this script yet.
+docs/adr/0023/0024.
+
+Also reads interannual_annual_means.csv (also written by
+estimate_flexibility_needs.py) and *pools* it here - not in that script -
+into a 4th "Interannual" panel (see docs/adr/0023/0024/0026): each row is
+one weather year's own raw `annual_mean` (MW), and pooling (the half-
+summed-absolute-deviation need/provision arithmetic) is cheap enough to redo
+on every plot invocation. This is deliberate, not just convenient: a
+weather year later found to be erroneous can be dropped via
+`--exclude-weather-year source:year[:run_type]` and the Interannual panel
+re-rendered in seconds, without re-running estimate_flexibility_needs.py's
+own expensive per-scenario GDX read (confirmed to matter in practice - a
+single bad weather year's annual mean, wildly unlike every other year's,
+dominated the pooled number before this existed).
 
 Split out from estimate_flexibility_needs.py (see its own docstring) so
 that iterating on a plot doesn't require re-running the expensive GDX read
@@ -62,6 +73,7 @@ Created on 20.08.2026
 import colorsys
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 # Add repo root to path for scripts.utils imports (see AGENTS.md's
@@ -86,6 +98,19 @@ from scripts.utils import setup_plot
 # docstring) - it's three fixed strings, not worth the coupling.
 COMMODITIES = ("ELECTRICITY", "HEAT", "HYDROGEN")
 
+# Default subplot columns for both plotting functions below - Daily/Weekly/
+# Annual only. `main()` passes DEFAULT_TIMESCALES + ["Interannual"] instead
+# whenever interannual_annual_means.csv has any rows to pool (see
+# docs/adr/0023/0024/0026) - a 4th panel, not a replacement for these three.
+DEFAULT_TIMESCALES = ["Daily", "Weekly", "Annual"]
+
+# Fixed Balmorel S52xT168 chronological grid (52 weeks x 168 hours), used to
+# weight each weather year's own contribution to the Interannual pool - own
+# copy of estimate_flexibility_needs.py's constant, for the same GDX-
+# independence reason as everything else on this page (see docs/adr/0023 for
+# why this is fixed rather than derived from row counts).
+HOURS_PER_WEATHER_YEAR = 8736
+
 # Trailing run-type+year suffix on a scenario name (see
 # categorize_countries.RUN_TYPE_RE) - kept as its own copy for the same
 # GDX-independence reason as COMMODITIES above, not imported.
@@ -101,12 +126,24 @@ WEATHER_YEAR_RE = re.compile(r"^(?P<source>.+)_WY(?P<weather_year>\d{4})$")
 _WEATHER_YEAR_STATS = {"mean": "mean", "min": "min", "median": "median", "max": "max"}
 
 
+def _is_weather_year(scenario: str) -> bool:
+    """Whether `scenario` itself parses as a weather-year run (its own
+    `_WY<year>` suffix, post SCENARIO_SUFFIX_RE stripping) - not merely
+    whether some *other* scenario happens to share its stripped-down
+    source name. "base_R2050" and "base_WY1986_F2050" both reduce to
+    source "base", but the first is the ordinary reference scenario, the
+    second one weather year of a sweep built from it - conflating them
+    would silently blend an unrelated scenario into a weather-year
+    ensemble's own mean/min/median/max (confirmed directly: without this
+    check, "base_R2050" got averaged into "base"'s own weather-year bar)."""
+    return WEATHER_YEAR_RE.match(SCENARIO_SUFFIX_RE.sub("", scenario)) is not None
+
+
 def _source_scenario(scenario: str) -> str:
     """`scenario` with its run-type/year suffix stripped, then its
-    weather-year suffix stripped if present - e.g. "base_WY1986_F2050" ->
-    "base", but "SSN_R2050" -> "SSN" (SCENARIO_SUFFIX_RE alone, no
-    weather-year suffix to strip further). The key every weather year in
-    one ensemble shares."""
+    weather-year suffix stripped - e.g. "base_WY1986_F2050" -> "base".
+    Only meaningful for a name `_is_weather_year` confirms; call sites
+    guard on that first (see `_summarize_weather_years`)."""
     base = SCENARIO_SUFFIX_RE.sub("", scenario)
     match = WEATHER_YEAR_RE.match(base)
     return match.group("source") if match else base
@@ -116,20 +153,21 @@ def _summarize_weather_years(rows: pd.DataFrame, stat: str) -> pd.DataFrame:
     """One row per (Scenario, Year, group_type, group, category,
     flex_option, Commodity, timescale) - unchanged for an ordinary
     scenario (still its own raw Scenario name, e.g. "SSN_R2050", so
-    `--clean`'s own suffix-stripping keeps working exactly as before) but
+    `--clean`'s own suffix-stripping keeps working exactly as before,
+    *even* when it happens to share a stripped-down source name with an
+    unrelated weather-year ensemble - see `_is_weather_year`) but
     collapsed to one summary row per *source* scenario (see docs/adr/0023's
-    "Scenario name") wherever that source scenario has more than one
-    distinct weather-year Scenario name present in `rows`. Auto-detected,
-    never opt-in behind a flag: with 30+ weather years, one bar per raw
-    Scenario is unreadable regardless of whether a flag was remembered -
-    `stat` (mean/min/median/max of `flex_need_twh` across weather years) is
-    the only configurable part. Applies uniformly to both need
-    (`group_type` in system/category/country) and provision
-    (`flex_option_*`) rows - the 30-bar unreadability problem is identical
-    for both, see docs/adr/0024's Consequences."""
-    source = rows["Scenario"].map(_source_scenario)
-    ensemble_size = rows.groupby(source)["Scenario"].transform("nunique")
-    display_scenario = source.where(ensemble_size > 1, rows["Scenario"])
+    "Scenario name") for every scenario name that itself parses as a
+    weather-year run. Auto-detected, never opt-in behind a flag: with 30+
+    weather years, one bar per raw Scenario is unreadable regardless of
+    whether a flag was remembered - `stat` (mean/min/median/max of
+    `flex_need_twh` across weather years) is the only configurable part.
+    Applies uniformly to both need (`group_type` in system/category/
+    country) and provision (`flex_option_*`) rows - the 30-bar
+    unreadability problem is identical for both, see docs/adr/0024's
+    Consequences."""
+    is_weather_year = rows["Scenario"].map(_is_weather_year)
+    display_scenario = rows["Scenario"].where(~is_weather_year, rows["Scenario"].map(_source_scenario))
     working = rows.assign(Scenario=display_scenario)
     group_cols = [c for c in rows.columns if c != "flex_need_twh"]
     # dropna=False: residual-load rows carry an empty (not NaN) flex_option
@@ -139,6 +177,165 @@ def _summarize_weather_years(rows: pd.DataFrame, stat: str) -> pd.DataFrame:
     # (group_type system_aggregate/category_aggregate/country) rather than
     # summarizing them.
     return working.groupby(group_cols, as_index=False, dropna=False)["flex_need_twh"].agg(_WEATHER_YEAR_STATS[stat])
+
+
+def _parse_weather_year_exclusions(raw: tuple) -> set:
+    """{(source_scenario, weather_year, run_type|None), ...} from
+    `--exclude-weather-year` values shaped `source:year` (excludes that
+    weather year from every run_type's own pool) or `source:year:run_type`
+    (just one) - see docs/adr/0026."""
+    exclusions = set()
+    for item in raw:
+        parts = item.split(":")
+        if len(parts) == 2:
+            source, year = parts
+            exclusions.add((source, year, None))
+        elif len(parts) == 3:
+            source, year, run_type = parts
+            exclusions.add((source, year, run_type))
+        else:
+            raise click.ClickException(
+                f"--exclude-weather-year must look like 'source:year' or 'source:year:run_type', got {item!r}"
+            )
+    return exclusions
+
+
+def _apply_weather_year_exclusions(annual_means: pd.DataFrame, exclusions: set) -> pd.DataFrame:
+    """`annual_means` with any row matching an `--exclude-weather-year`
+    entry dropped - matched against `(source_scenario, weather_year)`
+    (excludes that year from every run_type) or, when the exclusion names
+    one, `(source_scenario, weather_year, run_type)` specifically. Prints
+    exactly what got dropped rather than excluding silently."""
+    if not exclusions or annual_means.empty:
+        return annual_means
+    any_run_type = list(zip(
+        annual_means["source_scenario"], annual_means["weather_year"].astype(str), [None] * len(annual_means),
+        strict=True,
+    ))
+    specific = list(zip(
+        annual_means["source_scenario"], annual_means["weather_year"].astype(str), annual_means["run_type"],
+        strict=True,
+    ))
+    mask = np.array([a in exclusions or b in exclusions for a, b in zip(any_run_type, specific, strict=True)])
+    if mask.any():
+        dropped = sorted(set(zip(
+            annual_means.loc[mask, "source_scenario"],
+            annual_means.loc[mask, "weather_year"],
+            annual_means.loc[mask, "run_type"],
+            strict=True,
+        )))
+        print(f"--exclude-weather-year: dropping {int(mask.sum())} row(s) for {dropped}")
+    return annual_means[~mask]
+
+
+def _pool_interannual(annual_means: pd.DataFrame) -> pd.DataFrame:
+    """Interannual need/provision rows (`Scenario, Year, group_type, group,
+    category, flex_option, Commodity, timescale, flex_need_twh` - the same
+    shape `tidy` already has, so callers can concat this straight in), pooled
+    here from `annual_means`'s raw per-weather-year `annual_mean_mwh` values
+    rather than in estimate_flexibility_needs.py (see docs/adr/0026) - the
+    same math that script's own former `_interannual_rows` used, just
+    DataFrame-driven since the input is now a flat CSV, not an in-memory
+    accumulator:
+
+    `flex_option == ""` rows are residual load (sign-invariant need, same
+    construction as the Annual level one level down); `flex_option != ""`
+    rows are one option's own provision, signed by *that same group's* own
+    Interannual sign (never the option's own - the same rule as `flex_sign`/
+    `flexibility_provision`, docs/adr/0017), plus an "Other" catch-all per
+    group computed the same additive-residual way as every other timescale's
+    own Other. A (source_scenario, run_type, group...) pool with fewer than
+    2 weather years is skipped entirely (also what naturally excludes a
+    run_type with only one weather year so far, e.g. an R2050 sweep still in
+    progress, or a source scenario reduced to a single year by
+    `--exclude-weather-year`).
+
+    `Scenario` stays the plain source scenario name (e.g. "base") unless
+    that source genuinely has more than one run_type with its own pool, in
+    which case each gets a disambiguating `f"{source_scenario}_WY_{run_type}"`
+    suffix - distinguishable from any real scenario name (never has "_WY_"
+    followed by a bare letter) so it can't collide with an ordinary
+    scenario's own raw name once concatenated into `tidy` (confirmed this
+    collision is a real risk even without the suffix: "base_R2050", the
+    reference scenario, and "base"'s own weather-year ensemble both reduce
+    to plain "base" - see `_is_weather_year`)."""
+    mwh_to_twh = 1e-6
+    key_cols = ["source_scenario", "run_type", "group_type", "group", "category", "Commodity"]
+    residual = annual_means[annual_means["flex_option"] == ""]
+    options = annual_means[annual_means["flex_option"] != ""]
+
+    rows = []  # each dict carries _source_scenario/_run_type too, resolved into "Scenario" at the end
+    signs = {}  # tuple(key_cols) -> {weather_year: sign}
+    need_value = {}  # same key -> (need TWh, Year)
+    tracked = defaultdict(float)  # same key -> summed tracked-option provision (TWh)
+
+    for key, grp in residual.groupby(key_cols, dropna=False):
+        if grp["weather_year"].nunique() < 2:
+            continue
+        source_scenario, run_type, group_type, group, category, commodity = key
+        values = grp["annual_mean_mwh"].to_numpy(dtype=float)
+        n_year_mean = values.mean()
+        need = 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * mwh_to_twh
+        need_value[key] = (need, grp["Year"].iloc[0])
+        signs[key] = dict(zip(grp["weather_year"], np.sign(values - n_year_mean), strict=True))
+        rows.append({
+            "_source_scenario": source_scenario, "_run_type": run_type, "Year": grp["Year"].iloc[0],
+            "group_type": group_type, "group": group, "category": category,
+            "flex_option": "", "Commodity": commodity, "timescale": "Interannual",
+            "flex_need_twh": need,
+        })
+
+    for key, grp in options.groupby(key_cols + ["flex_option"], dropna=False):
+        if grp["weather_year"].nunique() < 2:
+            continue
+        source_scenario, run_type, group_type, group, category, commodity, flex_option = key
+        sign_key = (source_scenario, run_type, group_type.removeprefix("flex_option_"), group, category, commodity)
+        year_signs = signs.get(sign_key)
+        if not year_signs:
+            continue  # no matching residual-load signal for this group - skip rather than guess
+        values = grp["annual_mean_mwh"].to_numpy(dtype=float)
+        n_year_mean = values.mean()
+        provision = 0.5 * HOURS_PER_WEATHER_YEAR * mwh_to_twh * sum(
+            (value - n_year_mean) * year_signs[year]
+            for year, value in zip(grp["weather_year"], values, strict=True)
+            if year in year_signs
+        )
+        tracked[sign_key] += provision
+        rows.append({
+            "_source_scenario": source_scenario, "_run_type": run_type, "Year": grp["Year"].iloc[0],
+            "group_type": group_type, "group": group, "category": category,
+            "flex_option": flex_option, "Commodity": commodity, "timescale": "Interannual",
+            "flex_need_twh": provision,
+        })
+
+    for sign_key, (need, need_year) in need_value.items():
+        source_scenario, run_type, group_type, group, category, commodity = sign_key
+        rows.append({
+            "_source_scenario": source_scenario, "_run_type": run_type, "Year": need_year,
+            "group_type": f"flex_option_{group_type}", "group": group, "category": category,
+            "flex_option": "Other", "Commodity": commodity, "timescale": "Interannual",
+            "flex_need_twh": need - tracked.get(sign_key, 0.0),
+        })
+
+    result_cols = ["Scenario", "Year", "group_type", "group", "category", "flex_option", "Commodity", "timescale", "flex_need_twh"]
+    if not rows:
+        return pd.DataFrame(columns=result_cols)
+
+    # Resolve "Scenario" only now that every row's own (source_scenario,
+    # run_type) is known - see this function's own docstring.
+    run_types_by_source = defaultdict(set)
+    for source_scenario, run_type, *_rest in need_value:
+        run_types_by_source[source_scenario].add(run_type)
+    for row in rows:
+        source_scenario = row.pop("_source_scenario")
+        run_type = row.pop("_run_type")
+        row["Scenario"] = (
+            source_scenario
+            if len(run_types_by_source[source_scenario]) <= 1
+            else f"{source_scenario}_WY_{run_type}"
+        )
+
+    return pd.DataFrame(rows, columns=result_cols)
 
 
 def _display_scenarios(scenarios: list, clean: bool) -> list:
@@ -365,22 +562,33 @@ def _shared_ylim(
 
 
 def plot_flexibility_needs(
-    rows: pd.DataFrame, title: str, output_path: Path, hue_col: str = "group", dark: bool = False, clean: bool = False
+    rows: pd.DataFrame,
+    title: str,
+    output_path: Path,
+    hue_col: str = "group",
+    dark: bool = False,
+    clean: bool = False,
+    timescales: list = DEFAULT_TIMESCALES,
 ) -> None:
     """One figure, one panel per timescale: x-axis = scenario, one *stacked*
     bar per timescale (each `hue_col` value stacked in turn, see
     `_stack_bars`), height = flex_need_twh. `hue_col` defaults to "group"
     (spatial grouping: system/category/country); pass "flex_option" to
     stack by flex option instead (also draws the dashed total-need line,
-    see `_stack_bars`)."""
-    timescales = ["Daily", "Weekly", "Annual"]
+    see `_stack_bars`). `timescales` defaults to Daily/Weekly/Annual;
+    `main()` passes a 4th "Interannual" panel on top when pooling
+    interannual_annual_means.csv (via `_pool_interannual`) produced rows for
+    this commodity/group_type (see docs/adr/0023/0024/0026) - a scenario
+    with no weather-year ensemble simply shows an all-zero Interannual panel (`_stack_bars` sums an empty
+    slice to 0), not an error."""
     scenarios = sorted(rows["Scenario"].unique())
     groups = _ordered_hues(hue_col, rows[hue_col].unique())
     x = np.arange(len(scenarios))
     width = 0.6
     ylim = _shared_ylim(rows, hue_col)
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axes = plt.subplots(1, len(timescales), figsize=(5 * len(timescales), 5), squeeze=False)
+    axes = axes[0]
     for ax, timescale in zip(axes, timescales):
         sub = rows[rows["timescale"] == timescale]
         _stack_bars(
@@ -416,22 +624,28 @@ def plot_flexibility_needs(
 
 
 def plot_flex_option_category_grid(
-    rows: pd.DataFrame, title: str, output_path: Path, dark: bool = False, clean: bool = False
+    rows: pd.DataFrame,
+    title: str,
+    output_path: Path,
+    dark: bool = False,
+    clean: bool = False,
+    timescales: list = DEFAULT_TIMESCALES,
 ) -> None:
     """Grid: one row per Combined category, one column per timescale; each
     subplot stacks scenario x flex option (see `_stack_bars`, including the
     dashed total-need line) - the category-level counterpart to
     `plot_flexibility_needs(..., hue_col="flex_option")`'s system-wide plot,
-    which can't itself carry a second (category) dimension.
+    which can't itself carry a second (category) dimension. `timescales`
+    defaults to Daily/Weekly/Annual; see `plot_flexibility_needs`'s own
+    docstring for the 4th "Interannual" column `main()` adds.
 
-    The y-axis is shared *within* a category's own row (its Daily/Weekly/
-    Annual columns), not across categories - different categories can have
-    wildly different absolute magnitudes (e.g. "High Demand" vs "Low
-    Demand"), so a grid-wide shared axis would flatten smaller categories
-    to invisible slivers; each row scaling to its own data keeps every
-    category readable while still letting its three timescales be compared
-    against each other."""
-    timescales = ["Daily", "Weekly", "Annual"]
+    The y-axis is shared *within* a category's own row (its timescale
+    columns), not across categories - different categories can have wildly
+    different absolute magnitudes (e.g. "High Demand" vs "Low Demand"), so
+    a grid-wide shared axis would flatten smaller categories to invisible
+    slivers; each row scaling to its own data keeps every category
+    readable while still letting its timescales be compared against each
+    other."""
     categories = sorted(rows["group"].unique())
     flex_options = _ordered_hues("flex_option", rows["flex_option"].unique())
     scenarios = sorted(rows["Scenario"].unique())
@@ -439,7 +653,7 @@ def plot_flex_option_category_grid(
     width = 0.6
 
     fig, axes = plt.subplots(
-        len(categories), 3, figsize=(15, 4 * len(categories)), squeeze=False
+        len(categories), len(timescales), figsize=(5 * len(timescales), 4 * len(categories)), squeeze=False
     )
     for row_i, category in enumerate(categories):
         cat_rows = rows[rows["group"] == category]
@@ -504,6 +718,24 @@ def plot_flex_option_category_grid(
     help="Path to estimate_flexibility_needs.py's output. Defaults to <output-dir>/flexibility_needs.csv",
 )
 @click.option(
+    "--annual-means-csv",
+    type=str,
+    default=None,
+    help="Path to estimate_flexibility_needs.py's raw per-weather-year output. Defaults to "
+    "<output-dir>/interannual_annual_means.csv. When present and non-empty, pooled here (see "
+    "docs/adr/0023/0024/0026) into a 4th 'Interannual' panel alongside Daily/Weekly/Annual - a source "
+    "scenario with no weather-year ensemble just shows an all-zero Interannual panel there, not an error.",
+)
+@click.option(
+    "--exclude-weather-year",
+    "exclude_weather_years",
+    multiple=True,
+    default=(),
+    help="Drop a weather year from the Interannual pool before pooling, e.g. --exclude-weather-year "
+    "base:1985 (every run_type) or base:1985:F (just Fullyear), repeatable - see docs/adr/0026. Use this "
+    "once a weather year is found to be erroneous, without re-running estimate_flexibility_needs.py.",
+)
+@click.option(
     "--country",
     "countries",
     multiple=True,
@@ -529,18 +761,22 @@ def plot_flex_option_category_grid(
 )
 @click.option(
     "--weather-year-stat",
-    type=click.Choice(list(_WEATHER_YEAR_STATS)),
+    type=click.Choice([*_WEATHER_YEAR_STATS, "none"]),
     default="mean",
     show_default=True,
     help="How to summarize a weather-year ensemble's per-year bars into one (see docs/adr/0023/0024) - "
     "auto-detected whenever a source scenario has more than one weather year present, for both need and "
     "provision plots. A plain single-statistic bar, not a distribution view (see docs/adr/0024's "
     "Consequences) - a flex option's provision can flip sign year-to-year, so 'mean' can understate how "
-    "much it actually varies.",
+    "much it actually varies. 'none' fully disables this (and the 4th Interannual panel, which only makes "
+    "sense once weather years are pooled) - every Scenario name plotted independently, exactly as before "
+    "this feature existed.",
 )
 def main(
     output_dir: str,
     table_csv: str,
+    annual_means_csv: str,
+    exclude_weather_years: tuple,
     countries: tuple,
     dark: bool,
     fmt: str,
@@ -562,7 +798,42 @@ def main(
     if tidy.empty:
         print(f"{table_path} is empty - nothing to plot.")
         return
-    tidy = _summarize_weather_years(tidy, weather_year_stat)
+
+    timescales = list(DEFAULT_TIMESCALES)
+    if weather_year_stat == "none":
+        # Every Scenario name plotted independently, exactly as before
+        # weather-year ensembles existed - no summarizing, no Interannual
+        # panel (which is meaningless without pooling - it's a property of
+        # the ensemble, not of any one raw Scenario, see docs/adr/0023/0024).
+        print("--weather-year-stat none: plotting every Scenario independently, no Interannual panel.")
+    else:
+        tidy = _summarize_weather_years(tidy, weather_year_stat)
+
+        # interannual_annual_means.csv is raw, unpooled per-weather-year
+        # data (see docs/adr/0026) - pool it here (not read pre-pooled)
+        # specifically so --exclude-weather-year can drop a bad weather year
+        # and get a corrected Interannual panel without re-running
+        # estimate_flexibility_needs.py's own expensive GDX read.
+        annual_means_path = (
+            Path(annual_means_csv) if annual_means_csv else output_path / "interannual_annual_means.csv"
+        )
+        if annual_means_path.exists():
+            # fillna both category and flex_option: residual-load rows carry
+            # an empty (not NaN) flex_option in memory, but empty string
+            # fields round-trip through CSV as NaN (pandas' read_csv
+            # default) - _pool_interannual's own flex_option == "" split
+            # would otherwise treat every residual-load row as unmatched.
+            annual_means = pd.read_csv(
+                annual_means_path,
+                dtype={"category": str, "flex_option": str, "weather_year": str, "run_type": str},
+            ).fillna({"category": "", "flex_option": ""})
+            if not annual_means.empty:
+                exclusions = _parse_weather_year_exclusions(exclude_weather_years)
+                annual_means = _apply_weather_year_exclusions(annual_means, exclusions)
+                interannual = _pool_interannual(annual_means)
+                if not interannual.empty:
+                    tidy = pd.concat([tidy, interannual], ignore_index=True)
+                    timescales.append("Interannual")
 
     plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -584,6 +855,7 @@ def main(
                 plots_dir / f"{label}_aggregate_{commodity}.{fmt}",
                 dark=dark,
                 clean=clean,
+                timescales=timescales,
             )
 
         # --- Disaggregated residual-load views: derived here by summing the
@@ -606,6 +878,7 @@ def main(
                 plots_dir / f"system_disaggregated_{commodity}.{fmt}",
                 dark=dark,
                 clean=clean,
+                timescales=timescales,
             )
 
             category_disaggregated = (
@@ -621,6 +894,7 @@ def main(
                     plots_dir / f"category_disaggregated_{commodity}.{fmt}",
                     dark=dark,
                     clean=clean,
+                    timescales=timescales,
                 )
 
         # --- Aggregate flex-option views (same copper-plate bound, applied
@@ -636,6 +910,7 @@ def main(
                 hue_col="flex_option",
                 dark=dark,
                 clean=clean,
+                timescales=timescales,
             )
 
         option_category_rows = by_commodity[
@@ -648,6 +923,7 @@ def main(
                 plots_dir / f"category_by_option_aggregate_{commodity}.{fmt}",
                 dark=dark,
                 clean=clean,
+                timescales=timescales,
             )
 
         # --- Disaggregated flex-option views: summed from the CSV's
@@ -668,6 +944,7 @@ def main(
                 hue_col="flex_option",
                 dark=dark,
                 clean=clean,
+                timescales=timescales,
             )
 
             category_by_option_disaggregated = (
@@ -683,6 +960,7 @@ def main(
                     plots_dir / f"category_by_option_disaggregated_{commodity}.{fmt}",
                     dark=dark,
                     clean=clean,
+                    timescales=timescales,
                 )
 
             # --- Optional: one named country's own flex-option breakdown. ---
@@ -698,6 +976,7 @@ def main(
                     hue_col="flex_option",
                     dark=dark,
                     clean=clean,
+                    timescales=timescales,
                 )
 
     print(f"Wrote plots to {plots_dir}.")

@@ -49,18 +49,25 @@ so a sweep over dumb-charging share across scenarios actually reflects each
 scenario's own setting instead of whatever was last hand-edited into the
 shared base file (see docs/adr/0021).
 
-Also writes interannual_flexibility_needs.csv: a 4th decomposition level,
-one beyond Annual, measuring flexibility need/provision *across* weather
-years sharing one source scenario (`<source>_WY<year>`, see CONTEXT.md's
-"Weather year run") rather than within one year - see docs/adr/0023
-(compute architecture) and docs/adr/0024 (concept). Empty but always
-written, even for a scenario set with no weather years, so downstream
-consumers don't need to special-case its absence. Built from a small
-per-(weather year, group, commodity[, flex option]) `annual_mean` scalar
-accumulator captured during the ordinary per-scenario loop below - not by
-holding every weather year's full hourly series at once, which is exactly
-what the batching this module also does (see next paragraph) exists to
-avoid.
+Also writes interannual_annual_means.csv: one row per (source scenario,
+run_type, weather year, group[, flex option]) - the raw `annual_mean`
+scalar (mean hourly residual load / flex-option dispatch, MW) a 4th,
+Interannual decomposition level needs, one beyond Annual, measuring
+variability *across* weather years sharing one source scenario
+(`<source>_WY<year>`, see CONTEXT.md's "Weather year run") rather than
+within one year - see docs/adr/0023 (compute architecture), docs/adr/0024
+(concept) and docs/adr/0026 (why this file holds raw per-year values, not
+an already-pooled need/provision number: pooling - and excluding a weather
+year later found to be erroneous - now happens in
+`plot_flexibility_needs.py`, which is cheap to re-run, instead of requiring
+this script's own expensive per-scenario GDX read to be redone every time
+the pool changes). Empty but always written, even for a scenario set with
+no weather years, so downstream consumers don't need to special-case its
+absence. Built from a small per-(weather year, group, commodity[, flex
+option]) `annual_mean` scalar accumulator captured during the ordinary
+per-scenario loop below - not by holding every weather year's full hourly
+series at once, which is exactly what the batching this module also does
+(see next paragraph) exists to avoid.
 
 Reads scenario folders in fixed-size batches (`--batch-size`) rather than
 locating and collecting every scenario at once: `_get_result_cached`'s
@@ -194,25 +201,18 @@ NEEDS_COLUMNS = [
     "flex_need_twh",
 ]
 
-# interannual_flexibility_needs.csv's own row shape - same columns as
-# NEEDS_COLUMNS, but "Scenario" holds the *source* scenario name (the
-# weather-year sweep's shared base, e.g. "base", not any one
-# "base_WY1986_F2050") since an Interannual row is a property of the whole
-# ensemble, not of one weather year - see docs/adr/0023/0024.
-INTERANNUAL_COLUMNS = NEEDS_COLUMNS
+# interannual_annual_means.csv's own row shape - one row per (source
+# scenario, run_type, weather year, group[, flex_option]): the raw
+# per-year `annual_mean` scalar, *not* a pooled need/provision number (see
+# docs/adr/0026 for why pooling moved to plot_flexibility_needs.py, and
+# `_interannual_annual_mean_rows` below).
+ANNUAL_MEANS_COLUMNS = [
+    "source_scenario", "run_type", "weather_year", "Year",
+    "group_type", "group", "category", "flex_option", "Commodity",
+    "annual_mean_mwh",
+]
 
 _EMPTY_HOURLY = pd.DataFrame(columns=["Country", "Season", "Time", "Value"])
-
-# Fixed Balmorel S52xT168 chronological grid (52 weeks x 168 hours) this
-# whole pipeline already assumes throughout (see _period_means's own
-# hour-in-week parsing) - used as the Interannual level's per-weather-year
-# weight rather than each year's own present-row count, since the
-# accumulator (see `_annual_mean_aligned`) only ever keeps one scalar per
-# weather year, not the full hourly series row count is implicit in. A
-# weather year genuinely short of this (a partial/failed run) should be
-# excluded with a warning rather than silently mis-weighted - not yet
-# implemented, see docs/adr/0023's Consequences.
-HOURS_PER_WEATHER_YEAR = 8736
 
 # Flattened (flex_option, commodity, spec) triples for every commodity view
 # in flex_option_metrics.FLEX_OPTIONS whose own MainResults symbol carries
@@ -438,81 +438,41 @@ def _annual_mean_aligned(hourly: pd.DataFrame, sign: pd.DataFrame | None = None)
     return float(aligned["Value"].mean())
 
 
-def _interannual_rows(
+def _interannual_annual_mean_rows(
     accumulator: dict, source_scenario_to_year: dict
 ) -> pd.DataFrame:
-    """Interannual need/provision rows (see docs/adr/0023/0024) from the
-    scalar accumulator built during the per-scenario loop in `main()`:
-    `(source_scenario, group_type, group, category, commodity, flex_option)
-    -> {weather_year: annual_mean}`. `flex_option == ""` keys are residual
-    load (sign-invariant need, same construction as `flexibility_needs`
-    one level up); `flex_option != ""` keys are one option's own provision,
-    signed by *that same group's* own Interannual sign (never the option's
-    own - the same rule as `flex_sign`/`flexibility_provision`, docs/adr/
-    0017), plus an "Other" catch-all per group computed the same
-    additive-residual way as the per-scenario loop's own Other. A
-    (source_scenario, weather years) pool with fewer than 2 weather years
-    is skipped entirely - there's no interannual variability to measure
-    from one point."""
-    mwh_to_twh = 1e-6
+    """Flattens the scalar accumulator built during the per-scenario loop
+    in `main()` - `(source_scenario, run_type, group_type, group, category,
+    commodity, flex_option) -> {weather_year: annual_mean}` - into one row
+    per (source_scenario, run_type, weather_year, group[, flex_option]):
+    the raw `annual_mean_mwh` value, nothing pooled.
+
+    Deliberately does *no* pooling here (no need/provision arithmetic, no
+    sign, no Other catch-all, no F/R-collision Scenario-naming) - that
+    moved to `plot_flexibility_needs.py` (see docs/adr/0026): pooling only
+    needs this small table of scalars, not the GDX/hourly data this script
+    spends most of its time reading, so a weather year later discovered to
+    be erroneous (confirmed to happen: a single bad weather year's own
+    annual mean, wildly different from every other year's, dominated the
+    old pooled number - see docs/adr/0026's Context) can be excluded and
+    the ensemble re-pooled in seconds, without re-running this script's own
+    expensive per-scenario GDX read to get a corrected number."""
     rows = []
-    signs = {}  # (source_scenario, group_type, group, category, commodity) -> {weather_year: sign}
-    need_value = {}  # same key -> that group's own Interannual need (TWh)
-    tracked = defaultdict(float)  # same key -> summed tracked-option provision (TWh)
-
     for key, year_means in accumulator.items():
-        source_scenario, group_type, group, category, commodity, flex_option = key
-        if flex_option != "" or len(year_means) < 2:
-            continue
-        values = np.array(list(year_means.values()))
-        n_year_mean = values.mean()
-        need = 0.5 * HOURS_PER_WEATHER_YEAR * np.abs(values - n_year_mean).sum() * mwh_to_twh
-        sign_key = (source_scenario, group_type, group, category, commodity)
-        need_value[sign_key] = need
-        signs[sign_key] = {year: np.sign(value - n_year_mean) for year, value in year_means.items()}
-        rows.append({
-            "Scenario": source_scenario, "Year": source_scenario_to_year.get(source_scenario, ""),
-            "group_type": group_type, "group": group, "category": category,
-            "flex_option": "", "Commodity": commodity, "timescale": "Interannual",
-            "flex_need_twh": need,
-        })
-
-    for key, year_means in accumulator.items():
-        source_scenario, group_type, group, category, commodity, flex_option = key
-        if flex_option == "" or len(year_means) < 2:
-            continue
-        sign_key = (source_scenario, group_type.removeprefix("flex_option_"), group, category, commodity)
-        year_signs = signs.get(sign_key)
-        if not year_signs:
-            continue  # no matching residual-load signal for this group - skip rather than guess
-        values = np.array(list(year_means.values()))
-        n_year_mean = values.mean()
-        provision = 0.5 * HOURS_PER_WEATHER_YEAR * mwh_to_twh * sum(
-            (value - n_year_mean) * year_signs[year]
-            for year, value in year_means.items()
-            if year in year_signs
-        )
-        tracked[sign_key] += provision
-        rows.append({
-            "Scenario": source_scenario, "Year": source_scenario_to_year.get(source_scenario, ""),
-            "group_type": group_type, "group": group, "category": category,
-            "flex_option": flex_option, "Commodity": commodity, "timescale": "Interannual",
-            "flex_need_twh": provision,
-        })
-
-    for sign_key, need in need_value.items():
-        source_scenario, group_type, group, category, commodity = sign_key
-        rows.append({
-            "Scenario": source_scenario, "Year": source_scenario_to_year.get(source_scenario, ""),
-            "group_type": f"flex_option_{group_type}", "group": group, "category": category,
-            "flex_option": "Other", "Commodity": commodity, "timescale": "Interannual",
-            "flex_need_twh": need - tracked.get(sign_key, 0.0),
-        })
-
+        source_scenario, run_type, group_type, group, category, commodity, flex_option = key
+        year = source_scenario_to_year.get((source_scenario, run_type), "")
+        for weather_year, value in year_means.items():
+            rows.append({
+                "source_scenario": source_scenario, "run_type": run_type,
+                "weather_year": weather_year, "Year": year,
+                "group_type": group_type, "group": group, "category": category,
+                "flex_option": flex_option, "Commodity": commodity,
+                "annual_mean_mwh": value,
+            })
     return (
-        pd.DataFrame(rows, columns=INTERANNUAL_COLUMNS)
+        pd.DataFrame(rows, columns=ANNUAL_MEANS_COLUMNS)
         if rows
-        else pd.DataFrame(columns=INTERANNUAL_COLUMNS)
+        else pd.DataFrame(columns=ANNUAL_MEANS_COLUMNS)
     )
 
 
@@ -1109,7 +1069,7 @@ def build_flex_option_country_table(
     "--output-dir",
     type=str,
     default="build_postprocess",
-    help="Where to write flexibility_needs.csv/interannual_flexibility_needs.csv (and cache read GDX "
+    help="Where to write flexibility_needs.csv/interannual_annual_means.csv (and cache read GDX "
     "symbols per-folder under .gdx_cache/<symbol>/<folder>.pkl). Plotting is a separate step - see "
     "plot_flexibility_needs.py.",
 )
@@ -1176,12 +1136,12 @@ def main(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     table_path = output_path / "flexibility_needs.csv"
-    interannual_table_path = output_path / "interannual_flexibility_needs.csv"
+    annual_means_path = output_path / "interannual_annual_means.csv"
     cache_dir = output_path / ".gdx_cache"
 
     def _write_empty_outputs():
         pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
-        pd.DataFrame(columns=INTERANNUAL_COLUMNS).to_csv(interannual_table_path, index=False)
+        pd.DataFrame(columns=ANNUAL_MEANS_COLUMNS).to_csv(annual_means_path, index=False)
 
     categorization_path = (
         Path(categorization_csv)
@@ -1318,11 +1278,21 @@ def main(
             # (source_scenario, weather_year) from the scenario name's own
             # RUN_TYPE_RE `base` group - None for an ordinary, non-weather-
             # year scenario (see docs/adr/0023, CONTEXT.md's "WY folder").
+            # `run_type` (F or R) is carried into the accumulator key too -
+            # Fullyear and Rolling are different dispatch methodologies
+            # (see CONTEXT.md's "Fullyear run"/"Rolling run"), not
+            # interchangeable weather-year samples of the same thing, so
+            # they must never be pooled together into one Interannual
+            # ensemble even when they share a source scenario and weather
+            # year range (confirmed: doing so mixed a known-erroneous
+            # rolling result in with otherwise-consistent fullyear ones and
+            # produced a wildly implausible Interannual number).
             run_type_match = RUN_TYPE_RE.match(scenario_name)
             base = run_type_match.group("base") if run_type_match else scenario_name
+            run_type = run_type_match.group("run_type") if run_type_match else None
             source_scenario, weather_year = split_weather_year(base)
             if weather_year is not None:
-                source_scenario_to_year[source_scenario] = year
+                source_scenario_to_year[(source_scenario, run_type)] = year
 
             scfolder = global_scname_to_scfolder[scenario_name]
             ev_dumb_fraction = _load_ev_dumb_fraction(balmorel_path_obj, scfolder)
@@ -1378,7 +1348,7 @@ def main(
                 system_sign = flex_sign(system_hourly_rl)
                 system_need = flexibility_needs(system_hourly_rl)
                 if weather_year is not None:
-                    accumulator[(source_scenario, "system_aggregate", "All", "", commodity, "")][weather_year] = (
+                    accumulator[(source_scenario, run_type, "system_aggregate", "All", "", commodity, "")][weather_year] = (
                         _annual_mean_aligned(system_hourly_rl)
                     )
 
@@ -1392,7 +1362,7 @@ def main(
                     category_signs[group] = flex_sign(group_hourly_rl)
                     category_needs[group] = flexibility_needs(group_hourly_rl)
                     if weather_year is not None:
-                        accumulator[(source_scenario, "category_aggregate", group, "", commodity, "")][weather_year] = (
+                        accumulator[(source_scenario, run_type, "category_aggregate", group, "", commodity, "")][weather_year] = (
                             _annual_mean_aligned(group_hourly_rl)
                         )
 
@@ -1403,7 +1373,7 @@ def main(
                     country_signs[country] = flex_sign(group_hourly_rl)
                     country_needs[country] = flexibility_needs(group_hourly_rl)
                     if weather_year is not None:
-                        accumulator[(source_scenario, "country", country, category_map.get(country, ""), commodity, "")][weather_year] = (
+                        accumulator[(source_scenario, run_type, "country", country, category_map.get(country, ""), commodity, "")][weather_year] = (
                             _annual_mean_aligned(group_hourly_rl)
                         )
 
@@ -1480,7 +1450,7 @@ def main(
                         # threading a new return value through those three
                         # functions just for this scalar (see docs/adr/0023).
                         system_hourly_net = hourly_net.groupby(["Season", "Time"])["Value"].sum().reset_index()
-                        accumulator[(source_scenario, "flex_option_system_aggregate", "All", "", commodity, flex_option)][weather_year] = (
+                        accumulator[(source_scenario, run_type, "flex_option_system_aggregate", "All", "", commodity, flex_option)][weather_year] = (
                             _annual_mean_aligned(system_hourly_net, system_sign)
                         )
 
@@ -1491,7 +1461,7 @@ def main(
                             if group not in category_signs:
                                 continue
                             group_hourly_net = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
-                            accumulator[(source_scenario, "flex_option_category_aggregate", group, "", commodity, flex_option)][weather_year] = (
+                            accumulator[(source_scenario, run_type, "flex_option_category_aggregate", group, "", commodity, flex_option)][weather_year] = (
                                 _annual_mean_aligned(group_hourly_net, category_signs[group])
                             )
 
@@ -1499,7 +1469,7 @@ def main(
                             if country not in country_signs:
                                 continue
                             group_hourly_net = group_use.groupby(["Season", "Time"])["Value"].sum().reset_index()
-                            accumulator[(source_scenario, "flex_option_country", country, category_map.get(country, ""), commodity, flex_option)][weather_year] = (
+                            accumulator[(source_scenario, run_type, "flex_option_country", country, category_map.get(country, ""), commodity, flex_option)][weather_year] = (
                                 _annual_mean_aligned(group_hourly_net, country_signs[country])
                             )
 
@@ -1519,9 +1489,9 @@ def main(
                 # country-level "Other" is what a future investigation into
                 # its actual composition would start from (deferred, see
                 # docs/adr/0020's Consequences). The Interannual level's own
-                # "Other" is computed the same additive-residual way, inside
-                # `_interannual_rows` after the batch loop, from the
-                # accumulator - not here.
+                # pooling - including its own "Other" - now happens in
+                # plot_flexibility_needs.py, not here (see docs/adr/0026);
+                # this script only ever writes the raw per-year scalars.
                 other_system = {ts: system_need[ts] - system_tracked[ts] for ts in system_need}
                 batch_tables.append(
                     _needs_rows_from_dict(
@@ -1570,12 +1540,12 @@ def main(
     if not header_written:
         pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
 
-    _log("Pooling Interannual need/provision across weather years")
-    interannual = _interannual_rows(accumulator, source_scenario_to_year)
+    _log("Flattening per-weather-year annual means (pooling happens in plot_flexibility_needs.py, see docs/adr/0026)")
+    annual_means = _interannual_annual_mean_rows(accumulator, source_scenario_to_year)
     if years:
-        interannual = interannual[interannual["Year"].astype(str).isin([str(y) for y in years])]
-    interannual.to_csv(interannual_table_path, index=False)
-    _log(f"Wrote {len(interannual)} row(s) to {interannual_table_path}.")
+        annual_means = annual_means[annual_means["Year"].astype(str).isin([str(y) for y in years])]
+    annual_means.to_csv(annual_means_path, index=False)
+    _log(f"Wrote {len(annual_means)} row(s) to {annual_means_path}.")
     _log("Done. Plot with plot_flexibility_needs.py.")
 
 
