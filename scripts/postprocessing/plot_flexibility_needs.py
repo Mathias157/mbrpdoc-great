@@ -39,7 +39,9 @@ source scenario rather than one per raw Scenario - unreadable otherwise at
 30+ weather years. `--weather-year-stat` (default `mean`) picks
 mean/min/median/max of `flex_need_twh` across the ensemble; this is a
 plain single-statistic bar, not a distribution view - see
-docs/adr/0023/0024.
+docs/adr/0023/0024. A source scenario swept under more than one run_type
+(e.g. "base" under both Fullyear and Rolling) gets one bar per run_type
+instead of one blended bar - see docs/adr/0028.
 
 Also reads interannual_annual_means.csv (also written by
 estimate_flexibility_needs.py) and *pools* it here - not in that script -
@@ -48,11 +50,15 @@ one weather year's own raw `annual_mean` (MW), and pooling (the half-
 summed-absolute-deviation need/provision arithmetic) is cheap enough to redo
 on every plot invocation. This is deliberate, not just convenient: a
 weather year later found to be erroneous can be dropped via
-`--exclude-weather-year source:year[:run_type]` and the Interannual panel
+`--exclude-weather-year source:year[:run_type]` and every panel
 re-rendered in seconds, without re-running estimate_flexibility_needs.py's
 own expensive per-scenario GDX read (confirmed to matter in practice - a
 single bad weather year's annual mean, wildly unlike every other year's,
-dominated the pooled number before this existed).
+dominated the pooled number before this existed). Applies to all four
+timescales, not just Interannual (see docs/adr/0029) - it's parsed once
+and used both to drop matching `flexibility_needs.csv` rows before
+Daily/Weekly/Annual pooling and matching `interannual_annual_means.csv`
+rows before Interannual pooling.
 
 Split out from estimate_flexibility_needs.py (see its own docstring) so
 that iterating on a plot doesn't require re-running the expensive GDX read
@@ -123,6 +129,12 @@ SCENARIO_SUFFIX_RE = re.compile(r"_(?:F|R)\d{4}$")
 # GDX-independence reason as SCENARIO_SUFFIX_RE above.
 WEATHER_YEAR_RE = re.compile(r"^(?P<source>.+)_WY(?P<weather_year>\d{4})$")
 
+# Capturing counterpart of SCENARIO_SUFFIX_RE, used only to tell a
+# scenario's own run_type (F or R) apart - e.g. "base_WY1986_F2050" ->
+# "F". Kept separate from SCENARIO_SUFFIX_RE (rather than adding a group
+# to it) since most call sites only care *whether* the suffix is there.
+RUN_TYPE_LETTER_RE = re.compile(r"_(F|R)\d{4}$")
+
 _WEATHER_YEAR_STATS = {"mean": "mean", "min": "min", "median": "median", "max": "max"}
 
 
@@ -149,6 +161,27 @@ def _source_scenario(scenario: str) -> str:
     return match.group("source") if match else base
 
 
+def _run_type(scenario: str) -> str | None:
+    """The run-type letter (F or R) from `scenario`'s own trailing
+    `_<F|R><year>` suffix, e.g. "base_WY1986_F2050" -> "F", or None if it
+    has none (e.g. an `_INV` run). Used only to keep a source scenario's
+    Fullyear and Rolling weather-year ensembles apart - see
+    `_summarize_weather_years`."""
+    match = RUN_TYPE_LETTER_RE.search(scenario)
+    return match.group(1) if match else None
+
+
+def _weather_year(scenario: str) -> str | None:
+    """The weather year (4-digit string) from `scenario`'s own `_WY<year>`
+    suffix, post SCENARIO_SUFFIX_RE stripping, e.g. "base_WY1986_F2050"
+    -> "1986", or None if `scenario` isn't a weather-year run (see
+    `_is_weather_year`). Used to apply `--exclude-weather-year` to
+    `flexibility_needs.csv`'s raw Scenario rows - see
+    `_apply_weather_year_exclusions_to_needs`."""
+    match = WEATHER_YEAR_RE.match(SCENARIO_SUFFIX_RE.sub("", scenario))
+    return match.group("weather_year") if match else None
+
+
 def _summarize_weather_years(rows: pd.DataFrame, stat: str) -> pd.DataFrame:
     """One row per (Scenario, Year, group_type, group, category,
     flex_option, Commodity, timescale) - unchanged for an ordinary
@@ -165,9 +198,32 @@ def _summarize_weather_years(rows: pd.DataFrame, stat: str) -> pd.DataFrame:
     Applies uniformly to both need (`group_type` in system/category/
     country) and provision (`flex_option_*`) rows - the 30-bar
     unreadability problem is identical for both, see docs/adr/0024's
-    Consequences."""
+    Consequences.
+
+    A source scenario's weather years can be split across more than one
+    run_type (e.g. "base" swept under both Fullyear and Rolling) - pooling
+    those together would silently blend two different run types into one
+    "base" bar (confirmed directly: flexibility_needs.csv carries no
+    run_type column of its own, only Scenario, so nothing else stops
+    "base_WY1986_F2050" and "base_WY1986_R2050" from landing in the same
+    group). Disambiguated the same way `_pool_interannual` already does
+    for the Interannual panel (see docs/adr/0028): whenever a source has
+    more than one run_type among its own weather-year rows, those rows
+    fall back to f"{source}_WY_{run_type}" instead of the plain source
+    name, so each run_type keeps its own bar."""
     is_weather_year = rows["Scenario"].map(_is_weather_year)
-    display_scenario = rows["Scenario"].where(~is_weather_year, rows["Scenario"].map(_source_scenario))
+    source = rows["Scenario"].map(_source_scenario)
+    run_type = rows["Scenario"].map(_run_type)
+
+    run_types_by_source = (
+        pd.DataFrame({"source": source[is_weather_year], "run_type": run_type[is_weather_year]})
+        .groupby("source")["run_type"]
+        .nunique()
+    )
+    ambiguous = is_weather_year & (source.map(run_types_by_source).fillna(0) > 1) & run_type.notna()
+
+    display_scenario = rows["Scenario"].where(~is_weather_year, source)
+    display_scenario = display_scenario.where(~ambiguous, source + "_WY_" + run_type)
     working = rows.assign(Scenario=display_scenario)
     group_cols = [c for c in rows.columns if c != "flex_need_twh"]
     # dropna=False: residual-load rows carry an empty (not NaN) flex_option
@@ -226,6 +282,37 @@ def _apply_weather_year_exclusions(annual_means: pd.DataFrame, exclusions: set) 
         )))
         print(f"--exclude-weather-year: dropping {int(mask.sum())} row(s) for {dropped}")
     return annual_means[~mask]
+
+
+def _apply_weather_year_exclusions_to_needs(tidy: pd.DataFrame, exclusions: set) -> pd.DataFrame:
+    """Same matching semantics as `_apply_weather_year_exclusions`, but
+    applied to `tidy` (flexibility_needs.csv's raw per-weather-year
+    Scenario rows, before `_summarize_weather_years` pools them) rather
+    than `interannual_annual_means.csv`. That table has no
+    source_scenario/weather_year/run_type columns of its own, so they're
+    derived here from the raw `Scenario` string via `_source_scenario`/
+    `_weather_year`/`_run_type`. A non-weather-year Scenario's
+    `_weather_year` is always None, which can't match a real excluded
+    year, so ordinary scenarios are unaffected.
+
+    Without this, `--exclude-weather-year` only ever reached
+    `_pool_interannual` - a bad weather year kept being pooled into the
+    Daily/Weekly/Annual mean/min/median/max regardless of exclusion (see
+    docs/adr/0029)."""
+    if not exclusions or tidy.empty:
+        return tidy
+    source_scenario = tidy["Scenario"].map(_source_scenario)
+    weather_year = tidy["Scenario"].map(_weather_year)
+    run_type = tidy["Scenario"].map(_run_type)
+    any_run_type = list(zip(source_scenario, weather_year, [None] * len(tidy), strict=True))
+    specific = list(zip(source_scenario, weather_year, run_type, strict=True))
+    mask = np.array([a in exclusions or b in exclusions for a, b in zip(any_run_type, specific, strict=True)])
+    if mask.any():
+        dropped = sorted(set(zip(
+            source_scenario[mask].tolist(), weather_year[mask].tolist(), run_type[mask].tolist(),
+        )))
+        print(f"--exclude-weather-year: dropping {int(mask.sum())} row(s) for {dropped} (Daily/Weekly/Annual)")
+    return tidy[~mask]
 
 
 def _pool_interannual(annual_means: pd.DataFrame) -> pd.DataFrame:
@@ -752,9 +839,10 @@ def plot_flex_option_category_grid(
     "exclude_weather_years",
     multiple=True,
     default=(),
-    help="Drop a weather year from the Interannual pool before pooling, e.g. --exclude-weather-year "
-    "base:1985 (every run_type) or base:1985:F (just Fullyear), repeatable - see docs/adr/0026. Use this "
-    "once a weather year is found to be erroneous, without re-running estimate_flexibility_needs.py.",
+    help="Drop a weather year before pooling, from every timescale (Daily/Weekly/Annual/Interannual), "
+    "e.g. --exclude-weather-year base:1985 (every run_type) or base:1985:F (just Fullyear), repeatable - "
+    "see docs/adr/0026/0029. Use this once a weather year is found to be erroneous, without re-running "
+    "estimate_flexibility_needs.py.",
 )
 @click.option(
     "--country",
@@ -820,14 +908,19 @@ def main(
         print(f"{table_path} is empty - nothing to plot.")
         return
 
+    exclusions = _parse_weather_year_exclusions(exclude_weather_years)
+
     timescales = list(DEFAULT_TIMESCALES)
     if weather_year_stat == "none":
         # Every Scenario name plotted independently, exactly as before
         # weather-year ensembles existed - no summarizing, no Interannual
         # panel (which is meaningless without pooling - it's a property of
         # the ensemble, not of any one raw Scenario, see docs/adr/0023/0024).
+        # --exclude-weather-year has nothing to drop a raw Scenario's own
+        # bar from here - it only matters once weather years are pooled.
         print("--weather-year-stat none: plotting every Scenario independently, no Interannual panel.")
     else:
+        tidy = _apply_weather_year_exclusions_to_needs(tidy, exclusions)
         tidy = _summarize_weather_years(tidy, weather_year_stat)
 
         # interannual_annual_means.csv is raw, unpooled per-weather-year
@@ -849,7 +942,6 @@ def main(
                 dtype={"category": str, "flex_option": str, "weather_year": str, "run_type": str},
             ).fillna({"category": "", "flex_option": ""})
             if not annual_means.empty:
-                exclusions = _parse_weather_year_exclusions(exclude_weather_years)
                 annual_means = _apply_weather_year_exclusions(annual_means, exclusions)
                 interannual = _pool_interannual(annual_means)
                 if not interannual.empty:
