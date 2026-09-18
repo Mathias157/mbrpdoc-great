@@ -494,10 +494,13 @@ FLEX_OPTION_COLOURS = {
     "Hydro reservoirs": "#33b1ff",  # standalone - a generation technology, not storage/conversion/backup
     "Electrolysers": "#add8e6",  # anchor for the hydrogen-conversion family below
     "Nuclear": "#8e44ad",  # standalone
-    # Electricity storage/movers - EV charging, V2G, Electricity storage and
-    # Electricity transmission are all temporal or spatial ways of shifting
-    # electricity rather than generating it, so they share one hue (anchored
-    # on Electricity storage's original tech_colours-derived amber).
+    # Electricity storage/movers - EV charging, V2G, Demand response,
+    # Electricity storage and Electricity transmission are all temporal or
+    # spatial ways of shifting electricity rather than generating it, so they
+    # share one hue (anchored on Electricity storage's original
+    # tech_colours-derived amber). Demand response joins this family rather
+    # than a demand-side one: shifting technologies dominate it and behave
+    # exactly like storage on the balance (see docs/adr/0030).
     **_shades(
         "#fff6d5ff",
         {
@@ -505,6 +508,7 @@ FLEX_OPTION_COLOURS = {
             "Electricity storage": 0.34,
             "Heat storage": 0.46,
             "EV charging": 0.58,
+            "Demand response": 0.66,
             "Electricity transmission": 0.74,
         },
     ),

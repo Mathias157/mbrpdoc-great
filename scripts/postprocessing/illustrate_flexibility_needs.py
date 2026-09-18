@@ -15,7 +15,7 @@ construction, FlexSign, flexibility_needs/flexibility_provision) rather than
 reimplementing them, so this illustration can't silently drift from what
 that script's CSV reports.
 
-Deliberately has no pickle cache and never touches build_postprocess/.gdx_cache
+Deliberately has no pickle cache and never touches build_postprocess/.gdx_cache_v2
 - always a fresh, single-scenario-folder GDX read (see docs/adr/0018 for the
 measured RAM/time cost and why the shared cache isn't a safe shortcut here).
 
@@ -405,7 +405,7 @@ def main(
         raise click.ClickException(f"Scenario {scenario!r} not found under {balmorel_path!r}.")
     folder = model.scname_to_scfolder[scenario]
     model.scenarios = [SC for SC in model.scenarios if folder == SC]
-    print(f"Reading MainResults for {scenario!r} (folder {folder!r}) fresh - no shared .gdx_cache, see docs/adr/0018.")
+    print(f"Reading MainResults for {scenario!r} (folder {folder!r}) fresh - no shared .gdx_cache_v2, see docs/adr/0018.")
     model.collect_results(suffix_naming_only=True)
     res = model.results
 

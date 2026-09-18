@@ -75,7 +75,7 @@ predecessor cached one pickle per symbol covering *every* located scenario
 - fine at this dataset's current preliminary weather-year resolution, but
 untenable once the full-resolution weather-year runs land (docs/adr/0023).
 Each symbol is now cached **per scenario folder**
-(`.gdx_cache/<symbol>/<folder>.pkl`, see `_get_batch_results_cached`), not
+(`.gdx_cache_v2/<symbol>/<folder>.pkl`, see `_get_batch_results_cached`), not
 per batch - batch composition depends on how many scenario folders exist
 and `--batch-size`, neither of which is stable across runs, but a folder's
 own name is. This relies on a hard rule (see CONTEXT.md's "Scenario name",
@@ -86,7 +86,7 @@ cached data would be ambiguous.
 Compute-only - writes flexibility_needs.csv and nothing else besides the
 two files above. Reading the GDX results this needs (particularly
 PRO_YCRAGFST) is the expensive part of this pipeline stage, both in time
-and RAM, even with the per-folder .gdx_cache - so plotting was split out
+and RAM, even with the per-folder .gdx_cache_v2 - so plotting was split out
 into its own companion script, `plot_flexibility_needs.py`, which only
 reads these CSVs and has no GDX/GAMS dependency at all. Run them back to
 back:
@@ -167,7 +167,8 @@ NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [
 
 # EL_DEMAND_YCRST's own VARIABLE_CATEGORY values with no flexibility-option
 # home - EXOGENOUS (pure inelastic household/industry/agriculture/datacentre
-# load) plus technical/parasitic categories confirmed present and nonzero in
+# load - raw and pre-demand-response since docs/adr/0030; before that it was
+# silently net of DR) plus technical/parasitic categories confirmed present in
 # this dataset (checked directly against a cached EL_DEMAND_YCRST.pkl, not
 # guessed): DIST_LOSSES/TRANS_LOSSES (grid losses - not dispatched),
 # ENDO_CCS (CCS parasitic load - not a tracked flex option), ENDO_BIOMETHANE
@@ -175,7 +176,7 @@ NON_DISPATCHABLE_SUPPLY_TECHNOLOGIES = [
 # category must land in exactly one place - here, or exactly one flex
 # option's own signed dispatch - so flexibility *provision*'s additivity
 # holds (see docs/adr/0017, which supersedes 0006's `--demand-categories`
-# flag). `ENDOGENOUS_ELECT2HEAT`/`ENDO_H2`/`ENDO_EV`'s flexible share are
+# flag). `ENDOGENOUS_ELECT2HEAT`/`ENDO_H2`/`ENDO_DR`/`ENDO_EV`'s flexible share are
 # therefore always excluded here - a flex option always claims them.
 ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES = (
     "EXOGENOUS",
@@ -185,7 +186,7 @@ ELECTRICITY_NON_FLEX_DEMAND_CATEGORIES = (
     "ENDO_BIOMETHANE",
 )
 # Heat/hydrogen's own technical-loss-equivalent categories are unverified
-# against live data (no local .gdx_cache for H_DEMAND_YCRAST/H2_DEMAND_YCRST
+# against live data (no local .gdx_cache_v2 for H_DEMAND_YCRAST/H2_DEMAND_YCRST
 # yet) - EXOGENOUS only for now, to be extended the same way once checked
 # (see docs/adr/0017).
 NON_ELECTRICITY_DEMAND_CATEGORIES = ("EXOGENOUS",)
@@ -224,12 +225,13 @@ _EMPTY_HOURLY = pd.DataFrame(columns=["Country", "Season", "Time", "Value"])
 
 # Flattened (flex_option, commodity, spec) triples for every commodity view
 # in flex_option_metrics.FLEX_OPTIONS whose own MainResults symbol carries
-# an hourly Season/Time dimension - every kind except "system_only"
-# (Demand response's DR_FLEX_Y has no "ST" counterpart in this dataset's own
-# naming convention for "already summed over Season/Time", see pybalmorel's
-# formatting.py). Demand response therefore never becomes a named row here -
-# it passively falls into the "Other" catch-all instead (see
-# `flexibility_provision`/docs/adr/0017). EV charging/V2G
+# an hourly Season/Time dimension - every kind except "system_only", plus any
+# "system_only" spec carrying an "hourly_category" (demand response, whose
+# annual DR_FLEX_Y has no "ST" counterpart but whose hourly series is
+# EL_DEMAND_YCRST Category=ENDO_DR, see docs/adr/0030). Before 0030 demand
+# response was not a named row here at all - it was netted into EXOGENOUS,
+# and so shrank residual load itself rather than landing in the "Other"
+# catch-all (see `flexibility_provision`/docs/adr/0017). EV charging/V2G
 # ("net_category_signed", EL_DEMAND_YCRST) are decomposable here even though
 # V2G wasn't originally (docs/adr/0007) - EL_DEMAND_YCRST does have an
 # hourly counterpart, unlike the V2G_FLEX_YCR symbol it replaced (see
@@ -239,8 +241,28 @@ HOURLY_FLEX_OPTIONS = [
     (flex_option, commodity, spec)
     for flex_option, commodities in FLEX_OPTIONS.items()
     for commodity, spec in commodities.items()
-    if spec["kind"] != "system_only"
+    if spec["kind"] != "system_only" or "hourly_category" in spec
 ]
+
+
+def _assert_dr_vintage(el: pd.DataFrame, batch_folders: list) -> None:
+    """Refuse MainResults written before docs/adr/0030, whose `EXOGENOUS` is net
+    of demand response rather than the raw inelastic profile. Such a file yields
+    a DR-flattened residual load - a number that looks fine and is wrong by the
+    DR volume - and has no `ENDO_DR` category to give demand response a
+    flexibility-option home. Detected on `EL_DEMAND_YCRST`, already loaded, so
+    it costs no extra GDX read. A scenario genuinely run with
+    `DEMANDRESPONSE=no` would also trip this; none of GREAT's do."""
+    have = set(el.loc[el["Category"] == "ENDO_DR", "Scenario"].unique())
+    missing = sorted(set(el["Scenario"].unique()) - have)
+    if missing:
+        raise ValueError(
+            f"EL_DEMAND_YCRST has no ENDO_DR category for {', '.join(missing)} "
+            f"(folders: {', '.join(batch_folders)}). These MainResults predate "
+            "docs/adr/0030, so their EXOGENOUS is net of demand response and "
+            "residual load would be DR-flattened. Re-run Balmorel with the "
+            "current base/output/OUTPUT_SUMMARY.inc."
+        )
 
 
 def _filter_area(df: pd.DataFrame, spec: dict) -> pd.DataFrame:
@@ -350,7 +372,7 @@ def _split_ev_dumb(
 
 
 def _folder_cache_path(cache_dir: Path, symbol: str, folder: str) -> Path:
-    """`.gdx_cache/<symbol>/<folder>.pkl` - one file per (symbol, scenario
+    """`.gdx_cache_v2/<symbol>/<folder>.pkl` - one file per (symbol, scenario
     folder), not one file per symbol covering every located scenario folder
     at once (this module's previous, simpler scheme - untenable once
     full-resolution weather-year runs land, see module docstring). Keyed by
@@ -884,10 +906,12 @@ def flex_option_hourly_net(
     if kind == "production":
         return _net_hourly(_tech_rows(pro), _EMPTY_HOURLY)
 
-    if kind == "consumption":
+    if kind == "consumption" or "hourly_category" in spec:
         if "hourly_category" in spec:
-            # Electrolysers: sourced from EL_DEMAND_YCRST's own ENDO_H2
-            # category rather than F_CONS_YCRAST, guaranteeing by
+            # Electrolysers (ENDO_H2) and demand response (ENDO_DR, whose
+            # annual value comes from a different symbol entirely - see
+            # docs/adr/0030): sourced from EL_DEMAND_YCRST's own category
+            # rather than F_CONS_YCRAST, guaranteeing by
             # construction that this exactly offsets what residual load
             # excludes (see docs/adr/0017) - unlike PtH
             # below, which needs F_CONS_YCRAST's Area column for its
@@ -1123,7 +1147,7 @@ def build_flex_option_country_table(
     type=str,
     default="build_postprocess",
     help="Where to write flexibility_needs.csv/interannual_annual_means.csv (and cache read GDX "
-    "symbols per-folder under .gdx_cache/<symbol>/<folder>.pkl). Plotting is a separate step - see "
+    "symbols per-folder under .gdx_cache_v2/<symbol>/<folder>.pkl). Plotting is a separate step - see "
     "plot_flexibility_needs.py.",
 )
 @click.option(
@@ -1164,14 +1188,14 @@ def build_flex_option_country_table(
     show_default=True,
     help="Scenario folders read per batch when --scenarios is not given (see docs/adr/0023) - bounds how "
     "much hourly GDX data is resident in memory at once. Each symbol is cached per scenario folder "
-    "(.gdx_cache/<symbol>/<folder>.pkl), so this can change freely between runs without invalidating "
+    "(.gdx_cache_v2/<symbol>/<folder>.pkl), so this can change freely between runs without invalidating "
     "anything already cached.",
 )
 @click.option(
     "--overwrite-cache",
     is_flag=True,
     default=False,
-    help="Re-read PRO_YCRAGFST/X_FLOW_YCRST/XH2_FLOW_YCRST/etc. from GDX instead of <output-dir>/.gdx_cache/ "
+    help="Re-read PRO_YCRAGFST/X_FLOW_YCRST/XH2_FLOW_YCRST/etc. from GDX instead of <output-dir>/.gdx_cache_v2/ "
     "(stale after new HPC results are synced down for the same scenario names).",
 )
 def main(
@@ -1190,7 +1214,7 @@ def main(
     output_path.mkdir(parents=True, exist_ok=True)
     table_path = output_path / "flexibility_needs.csv"
     annual_means_path = output_path / "interannual_annual_means.csv"
-    cache_dir = output_path / ".gdx_cache"
+    cache_dir = output_path / ".gdx_cache_v2"
 
     def _write_empty_outputs():
         pd.DataFrame(columns=NEEDS_COLUMNS).to_csv(table_path, index=False)
@@ -1341,6 +1365,7 @@ def main(
             batch_folders,
             global_scfolder_to_scname,
         )
+        _assert_dr_vintage(el, batch_folders)
         h = _get_batch_results_cached(
             res,
             "H_DEMAND_YCRAST",

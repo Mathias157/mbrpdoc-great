@@ -9,7 +9,7 @@ point per hour/day/week - so an interannual_annual_means.csv-derived pooled
 number (see docs/adr/0023/0024/0026) can be checked against the actual
 per-year shape it came from, the same way illustrate_flexibility_needs.py
 lets a Daily/Weekly/Annual number be checked. Recomputes its own pooling
-here from `.gdx_cache` directly (never reads either interannual CSV) - see
+here from `.gdx_cache_v2` directly (never reads either interannual CSV) - see
 this module's own `_interannual_need`/`_interannual_provision`, the same
 math plot_flexibility_needs.py's own `_pool_interannual` uses.
 
@@ -19,7 +19,7 @@ separate) - the two have genuinely different data-access shapes: one
 scenario folder, read fresh, vs. up to dozens of weather-year folders. See
 docs/adr/0025 for why this script also deliberately breaks from
 illustrate_flexibility_needs.py's own no-cache philosophy and reads from
-estimate_flexibility_needs.py's per-folder .gdx_cache instead - a fresh read
+estimate_flexibility_needs.py's per-folder .gdx_cache_v2 instead - a fresh read
 of every weather year in an ensemble is a many-minutes operation, not the
 single-scenario tool's few-seconds one, and estimate_flexibility_needs.py has
 almost always already built that cache by the time anyone wants this
@@ -34,7 +34,7 @@ guarantee illustrate_flexibility_needs.py already gives for the other three
 timescales.
 
 Requires estimate_flexibility_needs.py to have already run for this scenario
-set (--output-dir's .gdx_cache must have every requested weather year's
+set (--output-dir's .gdx_cache_v2 must have every requested weather year's
 folder cached, per symbol) - this script never reads GDX itself, see
 docs/adr/0025.
 
@@ -356,7 +356,7 @@ def plot_interannual_flex_option_illustration(
 )
 @click.option("--balmorel-path", type=str, default="scripts/Balmorel", help="Path to the top level of Balmorel scenario folders (used only to resolve folder/scenario-name mappings, see docs/adr/0025 - never read for GDX here).")
 @click.option("--gams-sysdir", type=str, default=config("GAMS_SYSTEM_DIR", default=None), help="Path to GAMS system directory")
-@click.option("--output-dir", type=str, default="build_postprocess", help="Where estimate_flexibility_needs.py's .gdx_cache lives, and where to write flex_illustration_interannual/*.")
+@click.option("--output-dir", type=str, default="build_postprocess", help="Where estimate_flexibility_needs.py's .gdx_cache_v2 lives, and where to write flex_illustration_interannual/*.")
 @click.option("--categorization-csv", type=str, default=None, help="Path to categorize_countries.py's output. Defaults to <output-dir>/categorization.csv")
 @click.option("--reference-scenario", type=str, default="base_R2050", help="Scenario whose Combined category assignment is used (see docs/adr/0004)")
 @click.option("--dark", is_flag=True, help="Make dark plot?")
@@ -387,7 +387,7 @@ def main(
     setup_plot(dark=dark)
     output_path = Path(output_dir) / "flex_illustration_interannual"
     output_path.mkdir(parents=True, exist_ok=True)
-    cache_dir = Path(output_dir) / ".gdx_cache"
+    cache_dir = Path(output_dir) / ".gdx_cache_v2"
 
     if group_type == "system":
         group = "All"

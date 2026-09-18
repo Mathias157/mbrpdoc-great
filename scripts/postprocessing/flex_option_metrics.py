@@ -142,8 +142,11 @@ _METRIC_TYPES_BY_KIND = {
 #     Needs the hourly demand symbol (HOURLY_DEMAND_SYMBOLS), not the
 #     annual one used elsewhere in this dict, since the annual symbol has
 #     already collapsed all sign information a Region had within the year.
-#   - "system_only": unsigned magnitude, no Country dimension
-#     (DR_FLEX_Y) - unchanged; no equivalent net-signed source exists.
+#   - "system_only": unsigned annual magnitude, no Country dimension
+#     (DR_FLEX_Y). May carry "hourly_category" when the commodity's own
+#     demand symbol has an hourly counterpart the annual symbol does not
+#     match (demand response: gross downward regulation here, net ENDO_DR
+#     hourly in estimate_flexibility_needs.py - see docs/adr/0030).
 #   - "peaker": unsigned/positive backup production, per commodity (see
 #     docs/adr/0010) - electricity and heat only, no hydrogen backup exists
 #     in this model.
@@ -211,8 +214,18 @@ FLEX_OPTIONS = {
             "direction": "supply",
         },
     },
+    # Annual "use" stays DR_FLEX_Y (gross downward regulation, TWh) while the
+    # hourly series is ENDO_DR (net, up minus down). A deliberate divergence
+    # between this script and estimate_flexibility_needs.py: DR's *net* annual
+    # is ~0 for shifting technologies by construction (QDR_STORE_SHIFT forces
+    # sum(up) ~= sum(down) per weekly cycle), so it is not a "use" number at
+    # all - see docs/adr/0030.
     "Demand response": {
-        "ELECTRICITY": {"kind": "system_only", "symbol": "DR_FLEX_Y"},
+        "ELECTRICITY": {
+            "kind": "system_only",
+            "symbol": "DR_FLEX_Y",
+            "hourly_category": "ENDO_DR",
+        },
     },
     "Nuclear": {
         "ELECTRICITY": {"kind": "production", "technologies": ["CONDENSING"], "fuels": ["NUCLEAR"], "exclude_backup": True},

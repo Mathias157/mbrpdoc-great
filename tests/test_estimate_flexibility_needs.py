@@ -13,7 +13,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.postprocessing.estimate_flexibility_needs import (  # noqa: E402
+    _EMPTY_HOURLY,
     HOURLY_FLEX_OPTIONS,
+    _assert_dr_vintage,
     _split_ev_dumb,
     build_category_table,
     build_country_table,
@@ -261,14 +263,16 @@ def test_build_country_table_tags_category_and_defaults_missing_to_empty():
     assert (result.loc["B", "category"] == "").all()
 
 
-def test_hourly_flex_options_excludes_only_demand_response():
-    # DR_FLEX_Y has no "ST" (hourly) counterpart (see docs/adr/0007), so
-    # Demand response passively falls into the "Other" catch-all instead of
-    # ever appearing as a named row. V2G (unlike before docs/adr/0016) does
-    # have an hourly form - EL_DEMAND_YCRST's ENDO_EV category - so it's
-    # included here.
+def test_hourly_flex_options_includes_demand_response():
+    # Demand response used to be excluded here: DR_FLEX_Y has no "ST"
+    # counterpart (docs/adr/0007), and DR was netted into EXOGENOUS, so it
+    # shrank residual load instead of ever appearing as a named row. Since
+    # docs/adr/0030 it has an hourly form - EL_DEMAND_YCRST's ENDO_DR category,
+    # reached via its "system_only" spec's "hourly_category" - while its annual
+    # value still comes from DR_FLEX_Y. V2G (unlike before docs/adr/0016) has
+    # an hourly form too, EL_DEMAND_YCRST's ENDO_EV category.
     flex_option_names = {flex_option for flex_option, _, _ in HOURLY_FLEX_OPTIONS}
-    assert "Demand response" not in flex_option_names
+    assert "Demand response" in flex_option_names
     assert "V2G" in flex_option_names
     assert "District PtH" in flex_option_names
     assert "Fuel cells" in flex_option_names
@@ -571,3 +575,57 @@ def test_build_flex_option_country_table_skips_countries_with_no_sign():
     )
 
     assert result.empty
+
+
+def test_flex_option_hourly_net_sources_demand_response_from_endo_dr():
+    # A "system_only" spec carrying "hourly_category" must still reach the
+    # demand-category path - that is the whole mechanism demand response uses
+    # to get an hourly series while its annual value stays DR_FLEX_Y
+    # (docs/adr/0030). Demand-positive ENDO_DR comes back negated, since
+    # `_net_hourly` is supply minus demand.
+    el = pd.DataFrame(
+        {
+            "Scenario": ["TST_R2050"] * 3,
+            "Year": ["2050"] * 3,
+            "Country": ["A", "A", "A"],
+            "Season": ["S01", "S01", "S01"],
+            "Time": ["T001", "T002", "T001"],
+            "Category": ["ENDO_DR", "ENDO_DR", "EXOGENOUS"],
+            "Value": [-40.0, 10.0, 999.0],
+        }
+    )
+    spec = {"kind": "system_only", "symbol": "DR_FLEX_Y", "hourly_category": "ENDO_DR"}
+
+    out = flex_option_hourly_net(
+        spec,
+        "ELECTRICITY",
+        _EMPTY_HOURLY,
+        _EMPTY_HOURLY,
+        {"ELECTRICITY": el},
+        _EMPTY_HOURLY,
+        _EMPTY_HOURLY,
+        {},
+        "TST_R2050",
+        "2050",
+    )
+
+    got = out.set_index("Time")["Value"]
+    assert got["T001"] == 40.0
+    assert got["T002"] == -10.0
+
+
+def test_assert_dr_vintage_rejects_results_without_endo_dr():
+    # Pre-0030 MainResults have a net EXOGENOUS and no ENDO_DR at all; using
+    # them would silently produce a DR-flattened residual load.
+    old_vintage = pd.DataFrame(
+        {
+            "Scenario": ["old_R2050", "new_R2050", "new_R2050"],
+            "Category": ["EXOGENOUS", "EXOGENOUS", "ENDO_DR"],
+            "Value": [1.0, 1.0, -1.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="old_R2050"):
+        _assert_dr_vintage(old_vintage, ["old", "new"])
+
+    _assert_dr_vintage(old_vintage[old_vintage["Scenario"] == "new_R2050"], ["new"])
